@@ -22,12 +22,13 @@ interface DiagNode {
 }
 
 export default function Diagnostics({ dailyAggregates, alerts }: Props) {
-  // Latest daily aggregate for diagnostics
+  // Find last day with actual activity (spend > 0), fall back to most recent
   const latest = useMemo(() => {
     const sorted = [...dailyAggregates].sort((a, b) =>
       String(b.fields.Date ?? "").localeCompare(String(a.fields.Date ?? "")),
     );
-    return sorted[0]?.fields || {};
+    const active = sorted.find((r) => num(r.fields["Total Spend"]) > 0);
+    return (active || sorted[0])?.fields || {};
   }, [dailyAggregates]);
 
   // Diagnostic decision tree
