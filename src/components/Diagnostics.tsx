@@ -119,12 +119,17 @@ export default function Diagnostics({ dailyAggregates, alerts }: Props) {
   const clicks = num(latest["Clicks"]);
   const purchases = num(latest["Total Purchases"]);
 
+  // Use Math.max(1, val) to prevent log(0) crash
   const funnelData = {
     labels: ["Impressions", "Clicks", "Purchases"],
     datasets: [
       {
         label: "Volume",
-        data: [impressions, clicks, purchases],
+        data: [
+          Math.max(1, impressions),
+          Math.max(1, clicks),
+          Math.max(1, purchases),
+        ],
         backgroundColor: [
           CHART_COLORS.blue,
           CHART_COLORS.amber,
@@ -135,16 +140,18 @@ export default function Diagnostics({ dailyAggregates, alerts }: Props) {
     ],
   };
 
+  const hasData = impressions > 0 || clicks > 0 || purchases > 0;
+
   const funnelOptions = {
     ...defaultOptions,
     indexAxis: "y" as const,
     scales: {
       x: {
         ...defaultOptions.scales.x,
-        type: "logarithmic" as const,
+        ...(hasData ? { type: "logarithmic" as const } : {}),
         title: {
           display: true,
-          text: "Volume (log scale)",
+          text: hasData ? "Volume (log scale)" : "Volume",
           color: CHART_COLORS.muted,
         },
       },
