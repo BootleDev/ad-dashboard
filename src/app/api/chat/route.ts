@@ -1,19 +1,35 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { getAllDashboardData } from "@/lib/airtable";
-import { aggregateSnapshots } from "@/lib/utils";
+import { aggregateSnapshots, deduplicateByDate } from "@/lib/utils";
 
 export async function POST(request: Request) {
+  const cookieStore = await cookies();
+  if (cookieStore.get("bootle_dash_auth")?.value !== "authenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { message } = await request.json();
 
-  if (!message) {
+  if (!message || typeof message !== "string") {
     return NextResponse.json({ error: "No message" }, { status: 400 });
+  }
+
+  if (message.length > 4000) {
+    return NextResponse.json(
+      { error: "Message too long (max 4000 characters)" },
+      { status: 400 },
+    );
   }
 
   try {
     const data = await getAllDashboardData();
 
+    // Deduplicate daily aggregates before use
+    const dedupedDaily = deduplicateByDate(data.dailyAggregates);
+
     // Build context summary
-    const dailySorted = data.dailyAggregates
+    const dailySorted = dedupedDaily
       .map((r) => r.fields)
       .sort((a, b) => String(b.Date ?? "").localeCompare(String(a.Date ?? "")));
 
@@ -42,15 +58,24 @@ export async function POST(request: Request) {
       ? `\nNOTE: All campaigns have been paused since ${pausedSince}. Data shown is historical. Factor this into your analysis.\n`
       : "";
 
-    // Shopify daily sales (last 30 days)
-    const shopifySorted = data.shopifySales
+    // Shopify daily sales — scoped to campaign-active dates only
+    const activeDates = new Set(
+      dailySorted
+        .filter((d) => Number(d["Total Spend"] ?? 0) > 0)
+        .map((d) => String(d.Date ?? "").split("T")[0])
+        .filter(Boolean),
+    );
+    const campaignShopify = data.shopifySales
       .map((r) => r.fields)
+      .filter((r) => {
+        const d = String(r.Date ?? "").split("T")[0];
+        return d && activeDates.has(d);
+      })
       .sort((a, b) => String(b.Date ?? "").localeCompare(String(a.Date ?? "")));
-    const recentShopify = shopifySorted.slice(0, 30);
 
     const shopifyNote =
-      recentShopify.length > 0
-        ? `\nIMPORTANT: Meta pixel was broken during the campaign period. Shopify data shows TRUE sales. Always prefer Shopify data for revenue/orders/ROAS/CPA questions.\n\nSHOPIFY DAILY SALES (last 30 days):\n${JSON.stringify(recentShopify, null, 2)}\n`
+      campaignShopify.length > 0
+        ? `\nIMPORTANT: Meta pixel was broken during the campaign period. Shopify data shows TRUE sales. Always prefer Shopify data for revenue/orders/ROAS/CPA questions.\nShopify data is filtered to campaign-active dates only (${activeDates.size} days with ad spend).\n\nSHOPIFY DAILY SALES (campaign days):\n${JSON.stringify(campaignShopify, null, 2)}\n`
         : "\nNOTE: No Shopify sales data available yet.\n";
 
     const context = `You are an expert paid media analyst for Bootle, a Swedish modular drinkware brand.

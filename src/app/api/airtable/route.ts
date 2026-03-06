@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import {
   getAllDashboardData,
   getAdSnapshots,
@@ -9,6 +10,11 @@ import {
 } from "@/lib/airtable";
 
 export async function GET(request: Request) {
+  const cookieStore = await cookies();
+  if (cookieStore.get("bootle_dash_auth")?.value !== "authenticated") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const table = searchParams.get("table");
 

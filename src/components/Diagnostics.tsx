@@ -78,6 +78,7 @@ export default function Diagnostics({
         cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
         roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
         cpa: totalPurchases > 0 ? totalSpend / totalPurchases : 0,
+        totalSpend,
         impressions: totalImpressions,
         clicks: totalClicks,
         purchases: totalPurchases,
@@ -103,16 +104,14 @@ export default function Diagnostics({
   const nodes: DiagNode[] = useMemo(() => {
     const { cpm, ctr, cpc, roas, cpa } = metrics;
 
-    // Recalculate True ROAS/CPA from totals when Shopify data is available
-    const totalSpend =
-      metrics.impressions > 0 ? (metrics.cpm * metrics.impressions) / 1000 : 0;
+    // Use direct totalSpend for True ROAS/CPA when Shopify data is available
     const trueRoas =
-      showShopify && shopifyTotals.orders > 0 && totalSpend > 0
-        ? shopifyTotals.revenue / totalSpend
+      showShopify && shopifyTotals.orders > 0 && metrics.totalSpend > 0
+        ? shopifyTotals.revenue / metrics.totalSpend
         : roas;
     const trueCpa =
-      showShopify && shopifyTotals.orders > 0 && totalSpend > 0
-        ? totalSpend / shopifyTotals.orders
+      showShopify && shopifyTotals.orders > 0 && metrics.totalSpend > 0
+        ? metrics.totalSpend / shopifyTotals.orders
         : cpa;
 
     return [

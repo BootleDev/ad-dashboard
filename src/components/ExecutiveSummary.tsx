@@ -275,7 +275,7 @@ export default function ExecutiveSummary({
           title={showShopify && shopifyOrders > 0 ? "True ROAS" : "ROAS"}
           tooltip={
             showShopify && shopifyOrders > 0
-              ? "Shopify Revenue / Meta Spend — actual return on ad spend"
+              ? "Shopify Revenue (EUR) / Meta Spend (EUR) — campaign days only. Excludes organic orders."
               : "Return on Ad Spend — revenue generated per €1 spent. Target: 2.5x"
           }
           value={
@@ -378,7 +378,7 @@ export default function ExecutiveSummary({
           title="Revenue"
           tooltip={
             showShopify && shopifyRevenue > 0
-              ? "Total Shopify revenue (mixed GBP/EUR — approximate total)"
+              ? "Total Shopify gross revenue (EUR, campaign days only, pre-refund)"
               : "Total revenue attributed to ad campaigns"
           }
           value={
@@ -412,15 +412,15 @@ export default function ExecutiveSummary({
           <span
             className="font-semibold"
             style={{ color: "#a855f7" }}
-            title="Percentage of actual orders not tracked by Meta pixel"
+            title="Shopify orders not tracked by Meta on campaign-active days. Includes both pixel gaps and non-paid channel orders."
           >
-            Attribution Gap: {attributionGap.toFixed(0)}%
+            Unattributed Orders: {attributionGap.toFixed(0)}%
           </span>
           <span style={{ color: "var(--text-secondary)" }}>
             {shopifyOrders} Shopify orders vs {totalPurchases} Meta-tracked
             (campaign days only)
             {shopifyOrders >= totalPurchases
-              ? ` — pixel missed ${shopifyOrders - totalPurchases} orders`
+              ? ` — ${shopifyOrders - totalPurchases} orders not tracked by Meta`
               : ` — Meta over-attributed by ${totalPurchases - shopifyOrders} orders`}
           </span>
         </div>
