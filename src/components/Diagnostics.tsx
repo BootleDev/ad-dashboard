@@ -16,6 +16,8 @@ interface Props {
   tags: AirtableRecord[];
   campaignsPaused?: boolean;
   lastActiveDate?: string | null;
+  shopifySales?: AirtableRecord[];
+  showShopify?: boolean;
 }
 
 interface DiagNode {
@@ -32,6 +34,8 @@ export default function Diagnostics({
   snapshots,
   tags,
   campaignsPaused,
+  shopifySales = [],
+  showShopify = false,
 }: Props) {
   // Aggregate across all active days (spend > 0) for reliable diagnostics
   const { metrics, latestDate } = useMemo(() => {
@@ -82,9 +86,34 @@ export default function Diagnostics({
     };
   }, [dailyAggregates]);
 
+  // Shopify aggregates for True ROAS/CPA
+  const shopifyTotals = useMemo(() => {
+    const revenue = shopifySales.reduce(
+      (s, r) => s + num(r.fields["Gross Revenue"]),
+      0,
+    );
+    const orders = shopifySales.reduce(
+      (s, r) => s + num(r.fields["Total Orders"]),
+      0,
+    );
+    return { revenue, orders };
+  }, [shopifySales]);
+
   // Diagnostic decision tree
   const nodes: DiagNode[] = useMemo(() => {
     const { cpm, ctr, cpc, roas, cpa } = metrics;
+
+    // Recalculate True ROAS/CPA from totals when Shopify data is available
+    const totalSpend =
+      metrics.impressions > 0 ? (metrics.cpm * metrics.impressions) / 1000 : 0;
+    const trueRoas =
+      showShopify && shopifyTotals.orders > 0 && totalSpend > 0
+        ? shopifyTotals.revenue / totalSpend
+        : roas;
+    const trueCpa =
+      showShopify && shopifyTotals.orders > 0 && totalSpend > 0
+        ? totalSpend / shopifyTotals.orders
+        : cpa;
 
     return [
       {
@@ -124,40 +153,46 @@ export default function Diagnostics({
               : "CPC is efficient.",
       },
       {
-        label: "ROAS",
+        label:
+          showShopify && shopifyTotals.orders > 0
+            ? "True ROAS (Shopify)"
+            : "ROAS",
         metric: "Return on ad spend",
-        status: roas >= 2.5 ? "good" : roas >= 1.5 ? "warning" : "bad",
-        value: `${roas.toFixed(2)}x`,
+        status: trueRoas >= 2.5 ? "good" : trueRoas >= 1.5 ? "warning" : "bad",
+        value: `${trueRoas.toFixed(2)}x`,
         recommendation:
-          roas < 1.5
+          trueRoas < 1.5
             ? "ROAS below break-even (~1.8x for Bootle). Focus on conversion funnel and product-market fit."
-            : roas < 2.5
+            : trueRoas < 2.5
               ? "ROAS is positive but below target (2.5x). Optimise conversion path."
               : "ROAS is at or above target — scaling opportunity.",
       },
       {
-        label: "Cost per Order",
+        label:
+          showShopify && shopifyTotals.orders > 0
+            ? "True Cost/Order (Shopify)"
+            : "Cost per Order",
         metric: "Cost per acquisition",
         status:
-          cpa === 0
+          trueCpa === 0
             ? "warning"
-            : cpa < 30
+            : trueCpa < 30
               ? "good"
-              : cpa < 55
+              : trueCpa < 55
                 ? "warning"
                 : "bad",
-        value: cpa > 0 ? `€${cpa.toFixed(2)}` : "No orders",
+        value: trueCpa > 0 ? `€${trueCpa.toFixed(2)}` : "No orders",
         recommendation:
-          cpa === 0
+          trueCpa === 0
             ? "No purchases recorded. Focus on conversion rate optimisation before scaling spend."
-            : cpa >= 55
+            : trueCpa >= 55
               ? "CPA exceeds product value (€55). Review audience quality and landing page conversion rate."
-              : cpa >= 30
+              : trueCpa >= 30
                 ? "CPA above breakeven (~€30). Look for funnel optimisation opportunities."
                 : "CPA is profitable — below contribution margin.",
       },
     ];
-  }, [metrics]);
+  }, [metrics, showShopify, shopifyTotals]);
 
   const statusColors = {
     good: "border-green-500/40 bg-green-500/10",
@@ -177,21 +212,31 @@ export default function Diagnostics({
   const purchases = metrics.purchases;
 
   // Use Math.max(1, val) to prevent log(0) crash
-  const funnelData = {
-    labels: ["Impressions", "Clicks", "Purchases"],
-    datasets: [
-      {
-        label: "Volume",
-        data: [
-          Math.max(1, impressions),
-          Math.max(1, clicks),
-          Math.max(1, purchases),
-        ],
-        backgroundColor: [
+  const funnelLabels =
+    showShopify && shopifyTotals.orders > 0
+      ? ["Impressions", "Clicks", "Purchases (Meta)", "Orders (Shopify)"]
+      : ["Impressions", "Clicks", "Purchases"];
+  const funnelValues =
+    showShopify && shopifyTotals.orders > 0
+      ? [impressions, clicks, purchases, shopifyTotals.orders]
+      : [impressions, clicks, purchases];
+  const funnelColors =
+    showShopify && shopifyTotals.orders > 0
+      ? [
           CHART_COLORS.blue,
           CHART_COLORS.amber,
           CHART_COLORS.green,
-        ],
+          CHART_COLORS.purple,
+        ]
+      : [CHART_COLORS.blue, CHART_COLORS.amber, CHART_COLORS.green];
+
+  const funnelData = {
+    labels: funnelLabels,
+    datasets: [
+      {
+        label: "Volume",
+        data: funnelValues.map((v) => Math.max(1, v)),
+        backgroundColor: funnelColors,
         borderRadius: 6,
       },
     ],

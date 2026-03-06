@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { getAllDashboardData, getAdSnapshots, getCreativeTags, getDailyAggregates, getAlerts } from "@/lib/airtable";
+import {
+  getAllDashboardData,
+  getAdSnapshots,
+  getCreativeTags,
+  getDailyAggregates,
+  getAlerts,
+  getShopifySales,
+} from "@/lib/airtable";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -20,6 +27,10 @@ export async function GET(request: Request) {
     }
     if (table === "alerts") {
       const data = await getAlerts();
+      return NextResponse.json({ records: data });
+    }
+    if (table === "shopify") {
+      const data = await getShopifySales();
       return NextResponse.json({ records: data });
     }
 

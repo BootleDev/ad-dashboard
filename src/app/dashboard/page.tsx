@@ -16,6 +16,7 @@ interface DashboardData {
   tags: AirtableRecord[];
   dailyAggregates: AirtableRecord[];
   alerts: AirtableRecord[];
+  shopifySales: AirtableRecord[];
 }
 
 function filterByDateRange(
@@ -43,6 +44,7 @@ export default function DashboardPage() {
     end: null,
     label: "All Time",
   });
+  const [showShopify, setShowShopify] = useState(true);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -81,6 +83,10 @@ export default function DashboardPage() {
     () => (data ? filterByDateRange(data.alerts, "Alert Date", dateRange) : []),
     [data, dateRange],
   );
+  const filteredShopify = useMemo(
+    () => (data ? filterByDateRange(data.shopifySales, "Date", dateRange) : []),
+    [data, dateRange],
+  );
 
   // Campaign paused detection: find last date with spend > 0
   const lastActiveDate = useMemo(() => {
@@ -111,6 +117,18 @@ export default function DashboardPage() {
     return dates[0] || null;
   }, [data, dedupedDaily]);
 
+  const latestShopifyDate = useMemo(() => {
+    if (!data || !data.shopifySales.length) return null;
+    const dates = data.shopifySales
+      .map((r) => str(r.fields.Date).split("T")[0])
+      .filter(Boolean)
+      .sort()
+      .reverse();
+    return dates[0] || null;
+  }, [data]);
+
+  const hasShopifyData = (data?.shopifySales?.length ?? 0) > 0;
+
   const tabs: { key: Tab; label: string }[] = [
     { key: "executive", label: "Executive Summary" },
     { key: "creative", label: "Creative Performance" },
@@ -131,13 +149,34 @@ export default function DashboardPage() {
         <div className="shrink-0">
           <h1 className="text-lg font-bold">Bootle Ad Intelligence</h1>
           <div className="flex items-center gap-2">
-            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-              {latestDataDate
-                ? `Last data: ${latestDataDate}`
-                : loading
-                  ? "Loading..."
-                  : "No data"}
-            </p>
+            <div
+              className="flex items-center gap-2 text-xs"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              {latestDataDate ? (
+                <>
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full"
+                    style={{
+                      background: latestDataDate ? "#3b82f6" : "#6b7280",
+                    }}
+                    title={`Meta: ${latestDataDate}`}
+                  />
+                  {latestShopifyDate && (
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full"
+                      style={{ background: "#a855f7" }}
+                      title={`Shopify: ${latestShopifyDate}`}
+                    />
+                  )}
+                  Last data: {latestDataDate}
+                </>
+              ) : loading ? (
+                "Loading..."
+              ) : (
+                "No data"
+              )}
+            </div>
             {!loading && data && (
               <button
                 onClick={fetchData}
@@ -154,6 +193,32 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
           {data && (
             <DateRangeFilter value={dateRange} onChange={setDateRange} />
+          )}
+
+          {/* Shopify Data Toggle */}
+          {hasShopifyData && (
+            <button
+              onClick={() => setShowShopify((v) => !v)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all"
+              style={{
+                background: showShopify
+                  ? "rgba(168, 85, 247, 0.15)"
+                  : "var(--bg-secondary)",
+                color: showShopify ? "#a855f7" : "var(--text-secondary)",
+                border: showShopify
+                  ? "1px solid rgba(168, 85, 247, 0.3)"
+                  : "1px solid var(--border)",
+              }}
+              title="Toggle Shopify sales data overlay"
+            >
+              <span
+                className="inline-block w-2 h-2 rounded-full transition-colors"
+                style={{
+                  background: showShopify ? "#a855f7" : "#6b7280",
+                }}
+              />
+              Shopify Data
+            </button>
           )}
 
           {/* Tab Nav */}
@@ -225,6 +290,8 @@ export default function DashboardPage() {
                 dateRange={dateRange}
                 campaignsPaused={campaignsPaused}
                 lastActiveDate={lastActiveDate}
+                shopifySales={filteredShopify}
+                showShopify={showShopify}
               />
             )}
             {tab === "creative" && (
@@ -232,6 +299,7 @@ export default function DashboardPage() {
                 snapshots={filteredSnapshots}
                 tags={data.tags}
                 campaignsPaused={campaignsPaused}
+                showShopify={showShopify}
               />
             )}
             {tab === "diagnostics" && (
@@ -242,6 +310,8 @@ export default function DashboardPage() {
                 tags={data.tags}
                 campaignsPaused={campaignsPaused}
                 lastActiveDate={lastActiveDate}
+                shopifySales={filteredShopify}
+                showShopify={showShopify}
               />
             )}
           </>

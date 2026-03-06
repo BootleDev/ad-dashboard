@@ -46,9 +46,20 @@ export async function POST(request: Request) {
       ? `\nNOTE: All campaigns have been paused since ${pausedSince}. Data shown is historical. Factor this into your analysis.\n`
       : "";
 
+    // Shopify daily sales (last 30 days)
+    const shopifySorted = data.shopifySales
+      .map((r) => r.fields)
+      .sort((a, b) => String(b.Date ?? "").localeCompare(String(a.Date ?? "")));
+    const recentShopify = shopifySorted.slice(0, 30);
+
+    const shopifyNote =
+      recentShopify.length > 0
+        ? `\nIMPORTANT: Meta pixel was broken during the campaign period. Shopify data shows TRUE sales. Always prefer Shopify data for revenue/orders/ROAS/CPA questions.\n\nSHOPIFY DAILY SALES (last 30 days):\n${JSON.stringify(recentShopify, null, 2)}\n`
+        : "\nNOTE: No Shopify sales data available yet.\n";
+
     const context = `You are an expert paid media analyst for Bootle, a Swedish modular drinkware brand.
 You have access to the latest ad performance data.
-${pauseNote}
+${pauseNote}${shopifyNote}
 DAILY AGGREGATES (last 14 days):
 ${JSON.stringify(recentDaily, null, 2)}
 

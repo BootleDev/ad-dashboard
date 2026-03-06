@@ -37,6 +37,11 @@ export default function BudgetRecommendations({
       adsWithSpend.reduce((s, a) => s + num(a["CPC"]), 0) / adsWithSpend.length;
     const totalSpend = adsWithSpend.reduce((s, a) => s + num(a["Spend"]), 0);
 
+    // Check if ANY ads have conversions — used for info banner
+    const anyConversions = adsWithSpend.some(
+      (a) => num(a["Purchases"]) > 0 || num(a["ROAS"]) > 0,
+    );
+
     for (const ad of adsWithSpend) {
       const name = str(ad["Ad Name"]);
       const spend = num(ad["Spend"]);
@@ -48,36 +53,42 @@ export default function BudgetRecommendations({
       const purchases = num(ad["Purchases"]);
       const spendShare = totalSpend > 0 ? spend / totalSpend : 0;
 
+      // Conversion gate: require actual conversions for "increase" recommendations
+      const hasConversions = purchases > 0 || roas > 0;
+
       // High performer with low spend share → scale up
-      // When score is 0 (not populated), fall back to ROAS + CTR check
-      const isHighPerformer = score > 0
-        ? score >= 6 && ctr > avgCTR * 1.2
-        : roas >= 1.5 && ctr > avgCTR * 1.2;
+      // Must have conversions to qualify — prevents recommending scale-up on zero-conversion ads
+      const isHighPerformer =
+        hasConversions &&
+        (score > 0
+          ? score >= 6 && ctr > avgCTR * 1.2
+          : roas >= 1.5 && ctr > avgCTR * 1.2);
 
       if (isHighPerformer && spendShare < 0.3) {
         recs.push({
           action: "increase",
           adName: name,
-          reason: score > 0
-            ? `Score ${score.toFixed(1)}, CTR ${(ctr * 100).toFixed(1)}% (${((ctr / Math.max(0.001, avgCTR)) * 100 - 100).toFixed(0)}% above avg)`
-            : `ROAS ${roas.toFixed(2)}x, CTR ${(ctr * 100).toFixed(1)}% (${((ctr / Math.max(0.001, avgCTR)) * 100 - 100).toFixed(0)}% above avg)`,
+          reason:
+            score > 0
+              ? `Score ${score.toFixed(1)}, CTR ${(ctr * 100).toFixed(1)}% (${((ctr / Math.max(0.001, avgCTR)) * 100 - 100).toFixed(0)}% above avg)`
+              : `ROAS ${roas.toFixed(2)}x, CTR ${(ctr * 100).toFixed(1)}% (${((ctr / Math.max(0.001, avgCTR)) * 100 - 100).toFixed(0)}% above avg)`,
           currentSpend: spend,
           suggestedChange: "Increase budget",
         });
       }
 
       // Low performer with high spend → scale down
-      const isLowPerformer = score > 0
-        ? score <= 3
-        : roas < 1.0 && cpc > avgCPC * 1.3;
+      const isLowPerformer =
+        score > 0 ? score <= 3 : roas < 1.0 && cpc > avgCPC * 1.3;
 
       if (isLowPerformer && spend > totalSpend * 0.1) {
         recs.push({
           action: "decrease",
           adName: name,
-          reason: score > 0
-            ? `Score ${score.toFixed(1)}, consuming ${(spendShare * 100).toFixed(0)}% of budget`
-            : `ROAS ${roas.toFixed(2)}x, CPC ${((cpc / Math.max(0.01, avgCPC)) * 100).toFixed(0)}% of avg, consuming ${(spendShare * 100).toFixed(0)}% of budget`,
+          reason:
+            score > 0
+              ? `Score ${score.toFixed(1)}, consuming ${(spendShare * 100).toFixed(0)}% of budget`
+              : `ROAS ${roas.toFixed(2)}x, CPC ${((cpc / Math.max(0.01, avgCPC)) * 100).toFixed(0)}% of avg, consuming ${(spendShare * 100).toFixed(0)}% of budget`,
           currentSpend: spend,
           suggestedChange: "Reduce budget",
         });
@@ -128,6 +139,17 @@ export default function BudgetRecommendations({
       .slice(0, 6);
   }, [mergedAds]);
 
+  // Check if all ads have zero conversions (pixel tracking issue)
+  const allZeroConversions = useMemo(() => {
+    const adsWithSpend = mergedAds.filter((a) => num(a["Spend"]) > 0);
+    return (
+      adsWithSpend.length > 0 &&
+      adsWithSpend.every(
+        (a) => num(a["Purchases"]) === 0 && num(a["ROAS"]) === 0,
+      )
+    );
+  }, [mergedAds]);
+
   const actionStyle = {
     increase: "bg-green-500/10 border-green-500/20 text-green-400",
     decrease: "bg-amber-500/10 border-amber-500/20 text-amber-400",
@@ -164,6 +186,19 @@ export default function BudgetRecommendations({
           }}
         >
           Campaigns currently paused. When resuming, consider:
+        </p>
+      )}
+
+      {allZeroConversions && (
+        <p
+          className="text-xs mb-3 px-3 py-2 rounded-lg"
+          style={{
+            background: "rgba(168, 85, 247, 0.1)",
+            color: "rgb(168, 85, 247)",
+          }}
+        >
+          No conversion data available (pixel tracking issue). Enable Shopify
+          data for accurate recommendations.
         </p>
       )}
 

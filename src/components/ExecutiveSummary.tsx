@@ -27,6 +27,8 @@ interface Props {
   dateRange: DateRange;
   campaignsPaused: boolean;
   lastActiveDate: string | null;
+  shopifySales: AirtableRecord[];
+  showShopify: boolean;
 }
 
 export default function ExecutiveSummary({
@@ -36,6 +38,8 @@ export default function ExecutiveSummary({
   dateRange,
   campaignsPaused,
   lastActiveDate,
+  shopifySales,
+  showShopify,
 }: Props) {
   // Sort daily by date ascending for charts
   const sorted = useMemo(
@@ -103,10 +107,38 @@ export default function ExecutiveSummary({
   const curCPA = curPurchases > 0 ? curSpend / curPurchases : 0;
   const curImpressions = sum(currentPeriod, "Impressions");
   const curClicks = sum(currentPeriod, "Clicks");
-  const curCPM =
-    curImpressions > 0 ? (curSpend / curImpressions) * 1000 : 0;
+  const curCPM = curImpressions > 0 ? (curSpend / curImpressions) * 1000 : 0;
   const curCTR = curImpressions > 0 ? (curClicks / curImpressions) * 100 : 0;
   const curCPC = curClicks > 0 ? curSpend / curClicks : 0;
+
+  // Shopify KPIs
+  const shopifyRevenue = useMemo(
+    () =>
+      shopifySales.reduce((acc, r) => acc + num(r.fields["Gross Revenue"]), 0),
+    [shopifySales],
+  );
+  const shopifyOrders = useMemo(
+    () =>
+      shopifySales.reduce((acc, r) => acc + num(r.fields["Total Orders"]), 0),
+    [shopifySales],
+  );
+  const trueROAS = totalSpend > 0 ? shopifyRevenue / totalSpend : 0;
+  const trueCPA = shopifyOrders > 0 ? totalSpend / shopifyOrders : 0;
+  const attributionGap =
+    shopifyOrders > 0
+      ? ((shopifyOrders - totalPurchases) / shopifyOrders) * 100
+      : 0;
+
+  // Build Shopify revenue by date map for chart overlay
+  const shopifyByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of shopifySales) {
+      const d = str(r.fields.Date).split("T")[0];
+      if (!d) continue;
+      map.set(d, (map.get(d) ?? 0) + num(r.fields["Gross Revenue"]));
+    }
+    return map;
+  }, [shopifySales]);
 
   // Chart data: all active days in the filtered range
   const labels = activeDays.map((r) => {
@@ -114,29 +146,44 @@ export default function ExecutiveSummary({
     return d ? d.split("T")[0].slice(5) : "";
   });
 
-  const spendRevenueData = {
-    labels,
-    datasets: [
-      {
-        label: "Spend",
-        data: activeDays.map((r) => num(r.fields["Total Spend"])),
-        borderColor: CHART_COLORS.red,
-        backgroundColor: `${CHART_COLORS.red}20`,
-        fill: true,
-        tension: 0.3,
-        yAxisID: "y",
-      },
-      {
-        label: "Revenue",
-        data: activeDays.map((r) => num(r.fields["Revenue"])),
-        borderColor: CHART_COLORS.green,
-        backgroundColor: `${CHART_COLORS.green}20`,
-        fill: true,
-        tension: 0.3,
-        yAxisID: "y1",
-      },
-    ],
-  };
+  const spendRevenueDatasets = [
+    {
+      label: "Spend",
+      data: activeDays.map((r) => num(r.fields["Total Spend"])),
+      borderColor: CHART_COLORS.red,
+      backgroundColor: `${CHART_COLORS.red}20`,
+      fill: true,
+      tension: 0.3,
+      yAxisID: "y",
+    },
+    {
+      label: "Revenue (Meta)",
+      data: activeDays.map((r) => num(r.fields["Revenue"])),
+      borderColor: CHART_COLORS.green,
+      backgroundColor: `${CHART_COLORS.green}20`,
+      fill: true,
+      tension: 0.3,
+      yAxisID: "y1",
+    },
+  ];
+
+  // Add Shopify revenue overlay when enabled
+  if (showShopify && shopifyByDate.size > 0) {
+    spendRevenueDatasets.push({
+      label: "Revenue (Shopify)",
+      data: activeDays.map((r) => {
+        const d = str(r.fields.Date).split("T")[0];
+        return shopifyByDate.get(d) ?? 0;
+      }),
+      borderColor: CHART_COLORS.purple,
+      backgroundColor: "transparent",
+      fill: false,
+      tension: 0.3,
+      yAxisID: "y1",
+    });
+  }
+
+  const spendRevenueData = { labels, datasets: spendRevenueDatasets };
 
   const spendRevenueOptions = {
     ...defaultOptions,
@@ -223,28 +270,87 @@ export default function ExecutiveSummary({
           value={formatCurrency(totalSpend)}
           change={pctChange(curSpend, prevSpend)}
           subtitle={periodLabel}
+          sourceLabel="Meta"
         />
         <KPICard
-          title="ROAS"
-          tooltip="Return on Ad Spend — revenue generated per €1 spent. Target: 2.5x"
-          value={`${blendedROAS.toFixed(2)}x`}
-          change={pctChange(curROAS, prevROAS)}
+          title={showShopify && shopifyOrders > 0 ? "True ROAS" : "ROAS"}
+          tooltip={
+            showShopify && shopifyOrders > 0
+              ? "Shopify Revenue / Meta Spend — actual return on ad spend"
+              : "Return on Ad Spend — revenue generated per €1 spent. Target: 2.5x"
+          }
+          value={
+            showShopify && shopifyOrders > 0
+              ? `${trueROAS.toFixed(2)}x`
+              : `${blendedROAS.toFixed(2)}x`
+          }
+          change={
+            showShopify && shopifyOrders > 0
+              ? undefined
+              : pctChange(curROAS, prevROAS)
+          }
           subtitle={periodLabel}
+          sourceLabel={showShopify && shopifyOrders > 0 ? "Shopify" : "Meta"}
+          secondaryValue={
+            showShopify && shopifyOrders > 0
+              ? `Meta-attributed: ${blendedROAS.toFixed(2)}x`
+              : undefined
+          }
         />
         <KPICard
-          title="Cost per Order"
-          tooltip="How much ad spend it costs to get one sale"
-          value={formatCurrency(blendedCPA)}
-          change={pctChange(curCPA, prevCPA)}
+          title={
+            showShopify && shopifyOrders > 0
+              ? "True Cost/Order"
+              : "Cost per Order"
+          }
+          tooltip={
+            showShopify && shopifyOrders > 0
+              ? "Meta Spend / Shopify Orders — actual cost per acquisition"
+              : "How much ad spend it costs to get one sale"
+          }
+          value={
+            showShopify && shopifyOrders > 0
+              ? formatCurrency(trueCPA)
+              : formatCurrency(blendedCPA)
+          }
+          change={
+            showShopify && shopifyOrders > 0
+              ? undefined
+              : pctChange(curCPA, prevCPA)
+          }
           invertChange
           subtitle={periodLabel}
+          sourceLabel={showShopify && shopifyOrders > 0 ? "Shopify" : "Meta"}
+          secondaryValue={
+            showShopify && shopifyOrders > 0
+              ? `Meta-attributed: ${formatCurrency(blendedCPA)}`
+              : undefined
+          }
         />
         <KPICard
           title="Orders"
-          tooltip="Total purchases attributed to ads"
-          value={formatNumber(totalPurchases)}
-          change={pctChange(curPurchases, prevPurchases)}
+          tooltip={
+            showShopify && shopifyOrders > 0
+              ? "Total Shopify orders in period"
+              : "Total purchases attributed to ads"
+          }
+          value={
+            showShopify && shopifyOrders > 0
+              ? formatNumber(shopifyOrders)
+              : formatNumber(totalPurchases)
+          }
+          change={
+            showShopify && shopifyOrders > 0
+              ? undefined
+              : pctChange(curPurchases, prevPurchases)
+          }
           subtitle={periodLabel}
+          sourceLabel={showShopify && shopifyOrders > 0 ? "Shopify" : "Meta"}
+          secondaryValue={
+            showShopify && shopifyOrders > 0
+              ? `Meta-attributed: ${formatNumber(totalPurchases)}`
+              : undefined
+          }
         />
         <KPICard
           title="CPM"
@@ -252,12 +358,14 @@ export default function ExecutiveSummary({
           value={formatCurrency(avgCPM)}
           change={pctChange(curCPM, prevCPM)}
           invertChange
+          sourceLabel="Meta"
         />
         <KPICard
           title="CTR"
           tooltip="Click-through rate — % of viewers who clicked"
           value={formatPercent(avgCTR)}
           change={pctChange(curCTR, prevCTR)}
+          sourceLabel="Meta"
         />
         <KPICard
           title="CPC"
@@ -265,14 +373,56 @@ export default function ExecutiveSummary({
           value={formatCurrency(avgCPC)}
           change={pctChange(curCPC, prevCPC)}
           invertChange
+          sourceLabel="Meta"
         />
         <KPICard
           title="Revenue"
-          tooltip="Total revenue attributed to ad campaigns"
-          value={formatCurrency(totalRevenue)}
-          change={pctChange(curRevenue, prevRevenue)}
+          tooltip={
+            showShopify && shopifyRevenue > 0
+              ? "Total Shopify revenue (mixed GBP/EUR — approximate total)"
+              : "Total revenue attributed to ad campaigns"
+          }
+          value={
+            showShopify && shopifyRevenue > 0
+              ? formatCurrency(shopifyRevenue)
+              : formatCurrency(totalRevenue)
+          }
+          change={
+            showShopify && shopifyRevenue > 0
+              ? undefined
+              : pctChange(curRevenue, prevRevenue)
+          }
+          sourceLabel={showShopify && shopifyRevenue > 0 ? "Shopify" : "Meta"}
+          secondaryValue={
+            showShopify && shopifyRevenue > 0
+              ? `Meta-attributed: ${formatCurrency(totalRevenue)}`
+              : undefined
+          }
         />
       </div>
+
+      {/* Attribution Gap */}
+      {showShopify && shopifyOrders > 0 && (
+        <div
+          className="rounded-xl px-4 py-3 text-xs flex items-center gap-3"
+          style={{
+            background: "rgba(168, 85, 247, 0.08)",
+            border: "1px solid rgba(168, 85, 247, 0.2)",
+          }}
+        >
+          <span
+            className="font-semibold"
+            style={{ color: "#a855f7" }}
+            title="Percentage of actual orders not tracked by Meta pixel"
+          >
+            Attribution Gap: {attributionGap.toFixed(0)}%
+          </span>
+          <span style={{ color: "var(--text-secondary)" }}>
+            {shopifyOrders} Shopify orders vs {totalPurchases} Meta-tracked —
+            pixel missed {shopifyOrders - totalPurchases} orders
+          </span>
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid md:grid-cols-2 gap-4">

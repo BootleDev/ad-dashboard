@@ -7,6 +7,7 @@ export const TABLES = {
   CREATIVE_TAGS: "tblUh80aj6pvPhBRj",
   DAILY_AGGREGATES: "tblSYohFmAY3GM22n",
   ALERTS_LOG: "tbloH8ri15R8SHl2h",
+  SHOPIFY_DAILY_SALES: "tblhMQwAZkF4A293c",
 } as const;
 
 interface AirtableRecord {
@@ -92,14 +93,22 @@ export async function getAlerts() {
   });
 }
 
+export async function getShopifySales() {
+  return fetchAllRecords(TABLES.SHOPIFY_DAILY_SALES, {
+    sort: [{ field: "Date", direction: "desc" }],
+  });
+}
+
 // Convenience: get all data for dashboard
 export async function getAllDashboardData() {
-  const [snapshots, tags, dailyAggregates, alerts] = await Promise.all([
-    getAdSnapshots(),
-    getCreativeTags(),
-    getDailyAggregates(),
-    getAlerts(),
-  ]);
+  const [snapshots, tags, dailyAggregates, alerts, shopifySales] =
+    await Promise.all([
+      getAdSnapshots(),
+      getCreativeTags(),
+      getDailyAggregates(),
+      getAlerts(),
+      getShopifySales(),
+    ]);
 
-  return { snapshots, tags, dailyAggregates, alerts };
+  return { snapshots, tags, dailyAggregates, alerts, shopifySales };
 }

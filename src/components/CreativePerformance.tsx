@@ -14,6 +14,7 @@ interface Props {
   snapshots: AirtableRecord[];
   tags: AirtableRecord[];
   campaignsPaused?: boolean;
+  showShopify?: boolean;
 }
 
 type SortKey = "name" | "roas" | "spend" | "cpa" | "hookRate" | "score";
@@ -23,6 +24,7 @@ export default function CreativePerformance({
   snapshots,
   tags,
   campaignsPaused,
+  showShopify = false,
 }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -183,13 +185,37 @@ export default function CreativePerformance({
     },
   };
 
-  // Fatigue watchlist
+  // Fatigue watchlist — frequency-based (replaced AI Fatigue Flag)
   const fatigued = mergedAds.filter(
-    (ad) => ad["Fatigue Flag"] === true || ad["Fatigue Flag"] === "Yes",
+    (ad) => num(ad["Frequency"]) > 2.0 && num(ad["Spend"]) > 10,
   );
+
+  // Hook Rate vs CPA scatter: hide when >80% of ads have CPA === 0
+  const zeroCpaRatio = useMemo(() => {
+    if (mergedAds.length === 0) return 0;
+    const zeroCpaCount = mergedAds.filter((ad) => num(ad["CPA"]) === 0).length;
+    return zeroCpaCount / mergedAds.length;
+  }, [mergedAds]);
+  const hideScatter = zeroCpaRatio > 0.8 || showShopify;
 
   return (
     <div className="space-y-6">
+      {/* Shopify context banner */}
+      {showShopify && (
+        <div
+          className="rounded-xl px-4 py-3 text-xs"
+          style={{
+            background: "rgba(168, 85, 247, 0.08)",
+            border: "1px solid rgba(168, 85, 247, 0.2)",
+            color: "#a855f7",
+          }}
+        >
+          Ad-level ROAS uses Meta attribution only. Shopify data provides
+          accurate totals (see Executive Summary) but cannot be attributed to
+          individual ads.
+        </div>
+      )}
+
       {/* Ad Table */}
       <div
         className="rounded-xl overflow-hidden"
@@ -319,9 +345,27 @@ export default function CreativePerformance({
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        <ChartCard title="Hook Rate vs CPA">
-          <Scatter data={scatterData} options={scatterOptions} />
-        </ChartCard>
+        {hideScatter ? (
+          <div
+            className="rounded-xl p-5 flex items-center justify-center"
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            <p
+              className="text-xs text-center"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              CPA data unavailable for {Math.round(zeroCpaRatio * 100)}% of ads
+              (pixel tracking issue). Chart hidden to avoid misleading display.
+            </p>
+          </div>
+        ) : (
+          <ChartCard title="Hook Rate vs CPA">
+            <Scatter data={scatterData} options={scatterOptions} />
+          </ChartCard>
+        )}
 
         {/* Fatigue Watchlist */}
         <div
