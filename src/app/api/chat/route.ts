@@ -30,9 +30,25 @@ export async function POST(request: Request) {
     }
     const latestAds = Array.from(seenAds.values());
 
+    // Detect if campaigns are paused (last active spend date > 7 days ago)
+    const lastSpendDate = dailySorted
+      .filter((d) => Number(d["Total Spend"] ?? 0) > 0)
+      .map((d) => String(d.Date ?? "").split("T")[0])
+      .filter(Boolean)[0];
+    const pausedSince = lastSpendDate || "unknown";
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const isPaused = lastSpendDate
+      ? new Date(lastSpendDate) < sevenDaysAgo
+      : true;
+
+    const pauseNote = isPaused
+      ? `\nNOTE: All campaigns have been paused since ${pausedSince}. Data shown is historical. Factor this into your analysis.\n`
+      : "";
+
     const context = `You are an expert paid media analyst for Bootle, a Swedish modular drinkware brand.
 You have access to the latest ad performance data.
-
+${pauseNote}
 DAILY AGGREGATES (last 14 days):
 ${JSON.stringify(recentDaily, null, 2)}
 

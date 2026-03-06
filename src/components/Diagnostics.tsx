@@ -14,6 +14,8 @@ interface Props {
   alerts: AirtableRecord[];
   snapshots: AirtableRecord[];
   tags: AirtableRecord[];
+  campaignsPaused?: boolean;
+  lastActiveDate?: string | null;
 }
 
 interface DiagNode {
@@ -29,6 +31,7 @@ export default function Diagnostics({
   alerts,
   snapshots,
   tags,
+  campaignsPaused,
 }: Props) {
   // Find last day with actual activity (spend > 0), fall back to most recent
   const latest = useMemo(() => {
@@ -307,7 +310,10 @@ export default function Diagnostics({
       </div>
 
       {/* Budget Recommendations */}
-      <BudgetRecommendations mergedAds={mergedAds} />
+      <BudgetRecommendations
+        mergedAds={mergedAds}
+        campaignsPaused={campaignsPaused}
+      />
     </div>
   );
 }

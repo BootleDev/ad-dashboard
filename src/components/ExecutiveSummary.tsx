@@ -18,35 +18,57 @@ import {
   pctChange,
 } from "@/lib/utils";
 import type { AirtableRecord } from "@/lib/utils";
+import type { DateRange } from "./DateRangeFilter";
 
 interface Props {
   dailyAggregates: AirtableRecord[];
   snapshots: AirtableRecord[];
   alerts: AirtableRecord[];
+  dateRange: DateRange;
+  campaignsPaused: boolean;
+  lastActiveDate: string | null;
 }
 
 export default function ExecutiveSummary({
   dailyAggregates,
   snapshots,
   alerts,
+  dateRange,
+  campaignsPaused,
+  lastActiveDate,
 }: Props) {
   // Sort daily by date ascending for charts
-  const sorted = [...dailyAggregates].sort((a, b) =>
-    String(a.fields.Date ?? "").localeCompare(String(b.fields.Date ?? "")),
+  const sorted = useMemo(
+    () =>
+      [...dailyAggregates].sort((a, b) =>
+        String(a.fields.Date ?? "").localeCompare(String(b.fields.Date ?? "")),
+      ),
+    [dailyAggregates],
   );
 
-  // Use active days (spend > 0) for KPIs, not calendar days
-  const activeDays = sorted.filter((r) => num(r.fields["Total Spend"]) > 0);
-  const last30 = activeDays.slice(-30);
-  const prev30 = activeDays.slice(-60, -30);
+  // Use active days (spend > 0) for KPIs
+  const activeDays = useMemo(
+    () => sorted.filter((r) => num(r.fields["Total Spend"]) > 0),
+    [sorted],
+  );
+
+  // Split into current period and previous equal-length period for comparison
+  const halfLen = Math.ceil(activeDays.length / 2);
+  const currentPeriod = activeDays.slice(halfLen);
+  const prevPeriod = activeDays.slice(
+    Math.max(0, halfLen - currentPeriod.length),
+    halfLen,
+  );
 
   // Date range label
-  const firstDate = str(last30[0]?.fields.Date).split("T")[0].slice(5) || "—";
+  const firstDate =
+    str(activeDays[0]?.fields.Date).split("T")[0] || "—";
   const lastDate =
-    str(last30[last30.length - 1]?.fields.Date)
-      .split("T")[0]
-      .slice(5) || "—";
-  const periodLabel = `${firstDate} → ${lastDate} (${last30.length} active days)`;
+    str(activeDays[activeDays.length - 1]?.fields.Date).split("T")[0] || "—";
+  const periodLabel =
+    dateRange.label === "All Time"
+      ? `${firstDate} → ${lastDate} (${activeDays.length} active days)`
+      : `${dateRange.label} (${activeDays.length} active days)`;
 
   const sum = (arr: AirtableRecord[], field: string) =>
     arr.reduce((acc, r) => acc + num(r.fields[field]), 0);
@@ -55,27 +77,42 @@ export default function ExecutiveSummary({
     return sum(arr, field) / arr.length;
   };
 
-  const currentSpend = sum(last30, "Total Spend");
-  const prevSpend = sum(prev30, "Total Spend");
-  const currentRevenue = sum(last30, "Revenue");
-  const prevRevenue = sum(prev30, "Revenue");
-  const currentPurchases = sum(last30, "Total Purchases");
-  const prevPurchases = sum(prev30, "Total Purchases");
-  const currentROAS = currentSpend > 0 ? currentRevenue / currentSpend : 0;
-  const prevROAS = prevSpend > 0 ? prevRevenue / prevSpend : 0;
-  const currentCPA = currentPurchases > 0 ? currentSpend / currentPurchases : 0;
-  const prevCPA = prevPurchases > 0 ? prevSpend / prevPurchases : 0;
-  const currentCPM = avg(last30, "CPM");
-  const prevCPM = avg(prev30, "CPM");
-  const currentCTR = avg(last30, "Blended CTR");
-  const prevCTR = avg(prev30, "Blended CTR");
-  const currentCPC = avg(last30, "CPC");
-  const prevCPC = avg(prev30, "CPC");
+  // Full-period KPIs (over ALL active days in the filtered range)
+  const totalSpend = sum(activeDays, "Total Spend");
+  const totalRevenue = sum(activeDays, "Revenue");
+  const totalPurchases = sum(activeDays, "Total Purchases");
+  const blendedROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+  const blendedCPA = totalPurchases > 0 ? totalSpend / totalPurchases : 0;
+  const avgCPM = avg(activeDays, "CPM");
+  const avgCTR = avg(activeDays, "Blended CTR");
+  const avgCPC = avg(activeDays, "CPC");
 
-  // Chart data: last 30 days
-  const labels = last30.map((r) => {
+  // Previous period KPIs for comparison
+  const prevSpend = sum(prevPeriod, "Total Spend");
+  const prevRevenue = sum(prevPeriod, "Revenue");
+  const prevPurchases = sum(prevPeriod, "Total Purchases");
+  const prevROAS = prevSpend > 0 ? prevRevenue / prevSpend : 0;
+  const prevCPA = prevPurchases > 0 ? prevSpend / prevPurchases : 0;
+  const prevCPM = avg(prevPeriod, "CPM");
+  const prevCTR = avg(prevPeriod, "Blended CTR");
+  const prevCPC = avg(prevPeriod, "CPC");
+  const curSpendForCompare = sum(currentPeriod, "Total Spend");
+  const curRevenueForCompare = sum(currentPeriod, "Revenue");
+  const curPurchasesForCompare = sum(currentPeriod, "Total Purchases");
+  const curROAS =
+    curSpendForCompare > 0 ? curRevenueForCompare / curSpendForCompare : 0;
+  const curCPA =
+    curPurchasesForCompare > 0
+      ? curSpendForCompare / curPurchasesForCompare
+      : 0;
+  const curCPM = avg(currentPeriod, "CPM");
+  const curCTR = avg(currentPeriod, "Blended CTR");
+  const curCPC = avg(currentPeriod, "CPC");
+
+  // Chart data: all active days in the filtered range
+  const labels = activeDays.map((r) => {
     const d = str(r.fields.Date);
-    return d ? d.split("T")[0].slice(5) : ""; // MM-DD
+    return d ? d.split("T")[0].slice(5) : "";
   });
 
   const spendRevenueData = {
@@ -83,7 +120,7 @@ export default function ExecutiveSummary({
     datasets: [
       {
         label: "Spend",
-        data: last30.map((r) => num(r.fields["Total Spend"])),
+        data: activeDays.map((r) => num(r.fields["Total Spend"])),
         borderColor: CHART_COLORS.red,
         backgroundColor: `${CHART_COLORS.red}20`,
         fill: true,
@@ -92,7 +129,7 @@ export default function ExecutiveSummary({
       },
       {
         label: "Revenue",
-        data: last30.map((r) => num(r.fields["Revenue"])),
+        data: activeDays.map((r) => num(r.fields["Revenue"])),
         borderColor: CHART_COLORS.green,
         backgroundColor: `${CHART_COLORS.green}20`,
         fill: true,
@@ -129,7 +166,7 @@ export default function ExecutiveSummary({
     datasets: [
       {
         label: "ROAS",
-        data: last30.map((r) => num(r.fields["ROAS"])),
+        data: activeDays.map((r) => num(r.fields["ROAS"])),
         borderColor: CHART_COLORS.blue,
         backgroundColor: `${CHART_COLORS.blue}20`,
         fill: true,
@@ -137,7 +174,7 @@ export default function ExecutiveSummary({
       },
       {
         label: "Target (2.5x)",
-        data: last30.map(() => 2.5),
+        data: activeDays.map(() => 2.5),
         borderColor: CHART_COLORS.amber,
         borderDash: [5, 5],
         pointRadius: 0,
@@ -182,66 +219,73 @@ export default function ExecutiveSummary({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           title="Total Spend"
-          value={formatCurrency(currentSpend)}
-          change={pctChange(currentSpend, prevSpend)}
+          value={formatCurrency(totalSpend)}
+          change={pctChange(curSpendForCompare, prevSpend)}
           subtitle={periodLabel}
         />
         <KPICard
           title="ROAS"
-          value={`${currentROAS.toFixed(2)}x`}
-          change={pctChange(currentROAS, prevROAS)}
+          value={`${blendedROAS.toFixed(2)}x`}
+          change={pctChange(curROAS, prevROAS)}
           subtitle={periodLabel}
         />
         <KPICard
           title="CPA"
-          value={formatCurrency(currentCPA)}
-          change={pctChange(currentCPA, prevCPA)}
+          value={formatCurrency(blendedCPA)}
+          change={pctChange(curCPA, prevCPA)}
           subtitle={periodLabel}
         />
         <KPICard
           title="Purchases"
-          value={formatNumber(currentPurchases)}
-          change={pctChange(currentPurchases, prevPurchases)}
+          value={formatNumber(totalPurchases)}
+          change={pctChange(curPurchasesForCompare, prevPurchases)}
           subtitle={periodLabel}
         />
         <KPICard
           title="CPM"
-          value={formatCurrency(currentCPM)}
-          change={pctChange(currentCPM, prevCPM)}
+          value={formatCurrency(avgCPM)}
+          change={pctChange(curCPM, prevCPM)}
         />
         <KPICard
           title="CTR"
-          value={formatPercent(currentCTR)}
-          change={pctChange(currentCTR, prevCTR)}
+          value={formatPercent(avgCTR)}
+          change={pctChange(curCTR, prevCTR)}
         />
         <KPICard
           title="CPC"
-          value={formatCurrency(currentCPC)}
-          change={pctChange(currentCPC, prevCPC)}
+          value={formatCurrency(avgCPC)}
+          change={pctChange(curCPC, prevCPC)}
         />
         <KPICard
           title="Revenue"
-          value={formatCurrency(currentRevenue)}
-          change={pctChange(currentRevenue, prevRevenue)}
+          value={formatCurrency(totalRevenue)}
+          change={pctChange(curRevenueForCompare, prevRevenue)}
         />
       </div>
 
       {/* Charts Row */}
       <div className="grid md:grid-cols-2 gap-4">
-        <ChartCard title="Spend vs Revenue (30d)">
+        <ChartCard title={`Spend vs Revenue (${dateRange.label})`}>
           <Line data={spendRevenueData} options={spendRevenueOptions} />
         </ChartCard>
-        <ChartCard title="ROAS Trend (30d)">
+        <ChartCard title={`ROAS Trend (${dateRange.label})`}>
           <Line data={roasData} options={defaultOptions} />
         </ChartCard>
       </div>
 
       {/* Anomaly Detection */}
-      <AnomalyDetection dailyAggregates={dailyAggregates} />
+      <AnomalyDetection
+        dailyAggregates={dailyAggregates}
+        campaignsPaused={campaignsPaused}
+      />
 
       {/* Bottom Row: Alerts + Top/Bottom + Chat */}
       <div className="grid md:grid-cols-3 gap-4">
-        <AlertsFeed alerts={alerts} />
+        <AlertsFeed
+          alerts={alerts}
+          campaignsPaused={campaignsPaused}
+          lastActiveDate={lastActiveDate}
+        />
 
         {/* Top/Bottom Ads */}
         <div
@@ -273,7 +317,10 @@ export default function ExecutiveSummary({
               </div>
             ))}
             {top3.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              <p
+                className="text-xs"
+                style={{ color: "var(--text-secondary)" }}
+              >
                 No data
               </p>
             )}
@@ -301,7 +348,10 @@ export default function ExecutiveSummary({
               </div>
             ))}
             {bottom3.length === 0 && (
-              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+              <p
+                className="text-xs"
+                style={{ color: "var(--text-secondary)" }}
+              >
                 No data
               </p>
             )}

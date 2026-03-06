@@ -13,12 +13,17 @@ import { useState, useMemo } from "react";
 interface Props {
   snapshots: AirtableRecord[];
   tags: AirtableRecord[];
+  campaignsPaused?: boolean;
 }
 
 type SortKey = "name" | "roas" | "spend" | "cpa" | "hookRate" | "score";
 type SortDir = "asc" | "desc";
 
-export default function CreativePerformance({ snapshots, tags }: Props) {
+export default function CreativePerformance({
+  snapshots,
+  tags,
+  campaignsPaused,
+}: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -29,9 +34,14 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
   );
 
   const mergedAds = useMemo(() => {
-    // snapshots are sorted by date desc — first occurrence of each Ad ID is the latest
+    // Sort snapshots by date desc to ensure first occurrence is the latest
+    const sortedSnaps = [...snapshots].sort((a, b) =>
+      String(b.fields["Snapshot Date"] ?? "").localeCompare(
+        String(a.fields["Snapshot Date"] ?? ""),
+      ),
+    );
     const seen = new Map<string, Record<string, unknown>>();
-    for (const s of snapshots) {
+    for (const s of sortedSnaps) {
       const adId = str(s.fields["Ad ID"]);
       if (!adId || seen.has(adId)) continue;
       const tag = tagMap.get(adId) || {};
@@ -273,12 +283,21 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] ${
-                          str(ad["Ad Status"]) === "ACTIVE"
-                            ? "bg-green-500/20 text-green-400"
-                            : "bg-gray-500/20 text-gray-400"
+                          campaignsPaused
+                            ? "bg-gray-500/20 text-gray-400"
+                            : str(ad["Ad Status"]) === "ACTIVE"
+                              ? "bg-green-500/20 text-green-400"
+                              : "bg-gray-500/20 text-gray-400"
                         }`}
+                        title={
+                          campaignsPaused
+                            ? "Campaign paused — ad was active within paused campaign"
+                            : undefined
+                        }
                       >
-                        {str(ad["Ad Status"]) || "—"}
+                        {campaignsPaused
+                          ? `PAUSED / ${str(ad["Ad Status"]) || "—"}`
+                          : str(ad["Ad Status"]) || "—"}
                       </span>
                     </td>
                   </tr>

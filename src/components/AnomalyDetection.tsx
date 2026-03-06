@@ -6,6 +6,7 @@ import type { AirtableRecord } from "@/lib/utils";
 
 interface Props {
   dailyAggregates: AirtableRecord[];
+  campaignsPaused?: boolean;
 }
 
 interface Anomaly {
@@ -17,10 +18,13 @@ interface Anomaly {
   direction: "spike" | "drop";
 }
 
-export default function AnomalyDetection({ dailyAggregates }: Props) {
+export default function AnomalyDetection({
+  dailyAggregates,
+  campaignsPaused,
+}: Props) {
   const anomalies = useMemo(() => {
     const sorted = [...dailyAggregates].sort((a, b) =>
-      String(a.fields.Date ?? "").localeCompare(String(b.fields.Date ?? ""))
+      String(a.fields.Date ?? "").localeCompare(String(b.fields.Date ?? "")),
     );
 
     // Only look at days with activity
@@ -41,7 +45,7 @@ export default function AnomalyDetection({ dailyAggregates }: Props) {
       const values = active.map((r) => num(r.fields[key]));
       const mean = values.reduce((a, b) => a + b, 0) / values.length;
       const stdDev = Math.sqrt(
-        values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length
+        values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length,
       );
 
       if (stdDev === 0 || mean === 0) continue;
@@ -72,14 +76,28 @@ export default function AnomalyDetection({ dailyAggregates }: Props) {
     return (
       <div
         className="rounded-xl p-5"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+        }}
       >
-        <h3 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
+        <h3
+          className="text-sm font-medium mb-3"
+          style={{ color: "var(--text-secondary)" }}
+        >
           Anomaly Detection
         </h3>
         <p className="text-xs text-green-400">
           No anomalies detected in recent performance.
         </p>
+        {campaignsPaused && (
+          <p
+            className="text-xs mt-2"
+            style={{ color: "var(--text-secondary)" }}
+          >
+            Based on historical data — no recent activity.
+          </p>
+        )}
       </div>
     );
   }
@@ -87,9 +105,15 @@ export default function AnomalyDetection({ dailyAggregates }: Props) {
   return (
     <div
       className="rounded-xl p-5"
-      style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
+      }}
     >
-      <h3 className="text-sm font-medium mb-3" style={{ color: "var(--text-secondary)" }}>
+      <h3
+        className="text-sm font-medium mb-3"
+        style={{ color: "var(--text-secondary)" }}
+      >
         Anomaly Detection
       </h3>
       <div className="space-y-2">
@@ -106,7 +130,10 @@ export default function AnomalyDetection({ dailyAggregates }: Props) {
               <span className="font-medium">
                 {a.metric} {a.direction === "spike" ? "spike" : "drop"}
               </span>
-              <span style={{ color: "var(--text-secondary)" }}> on {a.date}</span>
+              <span style={{ color: "var(--text-secondary)" }}>
+                {" "}
+                on {a.date}
+              </span>
             </div>
             <div className="text-right">
               <span

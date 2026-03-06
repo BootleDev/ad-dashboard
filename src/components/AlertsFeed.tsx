@@ -5,6 +5,8 @@ import type { Fields } from "@/lib/utils";
 
 interface AlertsFeedProps {
   alerts: Array<{ fields: Fields }>;
+  campaignsPaused?: boolean;
+  lastActiveDate?: string | null;
 }
 
 const severityColors: Record<string, string> = {
@@ -21,19 +23,33 @@ const typeIcons: Record<string, string> = {
   WINNING_AD: "🏆",
 };
 
-export default function AlertsFeed({ alerts }: AlertsFeedProps) {
+export default function AlertsFeed({
+  alerts,
+  campaignsPaused,
+  lastActiveDate,
+}: AlertsFeedProps) {
   const recent = alerts.slice(0, 8);
 
   if (recent.length === 0) {
     return (
       <div
         className="rounded-xl p-5"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+        }}
       >
-        <h3 className="text-sm font-medium mb-4" style={{ color: "var(--text-secondary)" }}>
+        <h3
+          className="text-sm font-medium mb-4"
+          style={{ color: "var(--text-secondary)" }}
+        >
           Alerts
         </h3>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>No active alerts</p>
+        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
+          {campaignsPaused
+            ? `No alerts — campaigns paused since ${lastActiveDate ?? "unknown"}. Alerts generate when campaigns are active.`
+            : "No active alerts"}
+        </p>
       </div>
     );
   }
@@ -41,9 +57,15 @@ export default function AlertsFeed({ alerts }: AlertsFeedProps) {
   return (
     <div
       className="rounded-xl p-5"
-      style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
+      }}
     >
-      <h3 className="text-sm font-medium mb-4" style={{ color: "var(--text-secondary)" }}>
+      <h3
+        className="text-sm font-medium mb-4"
+        style={{ color: "var(--text-secondary)" }}
+      >
         Alerts ({alerts.length})
       </h3>
       <div className="space-y-2 max-h-[340px] overflow-y-auto">

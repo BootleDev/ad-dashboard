@@ -12,13 +12,31 @@ export function formatNumber(value: number): string {
   return value.toFixed(0);
 }
 
-export function pctChange(current: number, previous: number): number {
-  if (previous === 0) return 0;
+export function pctChange(
+  current: number,
+  previous: number,
+): number | undefined {
+  if (previous === 0) return current > 0 ? undefined : 0;
   return ((current - previous) / previous) * 100;
 }
 
+/** Deduplicate Daily Aggregates by Date field, keeping first occurrence per date. */
+export function deduplicateByDate(records: AirtableRecord[]): AirtableRecord[] {
+  const seen = new Set<string>();
+  return records.filter((r) => {
+    const date = str(r.fields.Date);
+    if (!date || seen.has(date)) return false;
+    seen.add(date);
+    return true;
+  });
+}
+
 export type Fields = Record<string, unknown>;
-export type AirtableRecord = { id: string; fields: Fields; createdTime: string };
+export type AirtableRecord = {
+  id: string;
+  fields: Fields;
+  createdTime: string;
+};
 
 export function num(val: unknown): number {
   if (typeof val === "number") return val;

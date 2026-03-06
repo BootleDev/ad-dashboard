@@ -6,6 +6,7 @@ import type { Fields } from "@/lib/utils";
 
 interface Props {
   mergedAds: Fields[];
+  campaignsPaused?: boolean;
 }
 
 interface BudgetRec {
@@ -16,7 +17,10 @@ interface BudgetRec {
   suggestedChange: string;
 }
 
-export default function BudgetRecommendations({ mergedAds }: Props) {
+export default function BudgetRecommendations({
+  mergedAds,
+  campaignsPaused,
+}: Props) {
   const recommendations = useMemo(() => {
     const recs: BudgetRec[] = [];
 
@@ -87,11 +91,13 @@ export default function BudgetRecommendations({ mergedAds }: Props) {
 
     // Deduplicate by ad name (keep most impactful)
     const seen = new Set<string>();
-    return recs.filter((r) => {
-      if (seen.has(r.adName)) return false;
-      seen.add(r.adName);
-      return true;
-    }).slice(0, 6);
+    return recs
+      .filter((r) => {
+        if (seen.has(r.adName)) return false;
+        seen.add(r.adName);
+        return true;
+      })
+      .slice(0, 6);
   }, [mergedAds]);
 
   const actionStyle = {
@@ -109,15 +115,35 @@ export default function BudgetRecommendations({ mergedAds }: Props) {
   return (
     <div
       className="rounded-xl p-5"
-      style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+      style={{
+        background: "var(--bg-card)",
+        border: "1px solid var(--border)",
+      }}
     >
-      <h3 className="text-sm font-medium mb-4" style={{ color: "var(--text-secondary)" }}>
+      <h3
+        className="text-sm font-medium mb-4"
+        style={{ color: "var(--text-secondary)" }}
+      >
         Budget Allocation Recommendations
       </h3>
 
+      {campaignsPaused && (
+        <p
+          className="text-xs mb-3 px-3 py-2 rounded-lg"
+          style={{
+            background: "rgba(245, 158, 11, 0.1)",
+            color: "rgb(245, 158, 11)",
+          }}
+        >
+          Campaigns currently paused. When resuming, consider:
+        </p>
+      )}
+
       {recommendations.length === 0 ? (
         <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-          No strong budget shifts recommended — performance is relatively balanced. When campaigns resume with fresh data, recommendations will appear here.
+          No strong budget shifts recommended — performance is relatively
+          balanced. When campaigns resume with fresh data, recommendations will
+          appear here.
         </p>
       ) : (
         <div className="space-y-2">
