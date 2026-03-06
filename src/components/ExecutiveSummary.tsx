@@ -46,19 +46,16 @@ export default function ExecutiveSummary({
     [dailyAggregates],
   );
 
-  // Active days (spend > 0) for rate-based KPIs; all days for volume KPIs
+  // Active days (spend > 0) for rate-based KPIs
   const activeDays = useMemo(
     () => sorted.filter((r) => num(r.fields["Total Spend"]) > 0),
     [sorted],
   );
 
-  // Split into current period and previous equal-length period for comparison
-  const halfLen = Math.ceil(activeDays.length / 2);
-  const currentPeriod = activeDays.slice(halfLen);
-  const prevPeriod = activeDays.slice(
-    Math.max(0, halfLen - currentPeriod.length),
-    halfLen,
-  );
+  // Symmetric period split — equal halves from both ends, middle day dropped on odd N
+  const half = Math.floor(activeDays.length / 2);
+  const prevPeriod = activeDays.slice(0, half);
+  const currentPeriod = activeDays.slice(activeDays.length - half);
 
   // Date range label
   const firstDate = str(activeDays[0]?.fields.Date).split("T")[0] || "—";
@@ -71,27 +68,11 @@ export default function ExecutiveSummary({
 
   const sum = (arr: AirtableRecord[], field: string) =>
     arr.reduce((acc, r) => acc + num(r.fields[field]), 0);
-  const avg = (arr: AirtableRecord[], field: string) => {
-    if (arr.length === 0) return 0;
-    return sum(arr, field) / arr.length;
-  };
 
-  // Impression-weighted average for rate metrics
-  const weightedAvg = (arr: AirtableRecord[], field: string) => {
-    const totalImpressions = sum(arr, "Impressions");
-    if (totalImpressions === 0) return 0;
-    return (
-      arr.reduce(
-        (acc, r) => acc + num(r.fields[field]) * num(r.fields["Impressions"]),
-        0,
-      ) / totalImpressions
-    );
-  };
-
-  // Full-period KPIs — volume metrics use ALL days, rates use active days
+  // Full-period KPIs — all metrics use active days only for consistency
   const totalSpend = sum(activeDays, "Total Spend");
-  const totalRevenue = sum(sorted, "Revenue");
-  const totalPurchases = sum(sorted, "Total Purchases");
+  const totalRevenue = sum(activeDays, "Revenue");
+  const totalPurchases = sum(activeDays, "Total Purchases");
   const blendedROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
   const blendedCPA = totalPurchases > 0 ? totalSpend / totalPurchases : 0;
   const totalImpressions = sum(activeDays, "Impressions");
@@ -115,21 +96,17 @@ export default function ExecutiveSummary({
   const prevCTR =
     prevImpressions > 0 ? (prevClicks / prevImpressions) * 100 : 0;
   const prevCPC = prevClicks > 0 ? prevSpend / prevClicks : 0;
-  const curSpendForCompare = sum(currentPeriod, "Total Spend");
-  const curRevenueForCompare = sum(currentPeriod, "Revenue");
-  const curPurchasesForCompare = sum(currentPeriod, "Total Purchases");
-  const curROAS =
-    curSpendForCompare > 0 ? curRevenueForCompare / curSpendForCompare : 0;
-  const curCPA =
-    curPurchasesForCompare > 0
-      ? curSpendForCompare / curPurchasesForCompare
-      : 0;
+  const curSpend = sum(currentPeriod, "Total Spend");
+  const curRevenue = sum(currentPeriod, "Revenue");
+  const curPurchases = sum(currentPeriod, "Total Purchases");
+  const curROAS = curSpend > 0 ? curRevenue / curSpend : 0;
+  const curCPA = curPurchases > 0 ? curSpend / curPurchases : 0;
   const curImpressions = sum(currentPeriod, "Impressions");
   const curClicks = sum(currentPeriod, "Clicks");
   const curCPM =
-    curImpressions > 0 ? (curSpendForCompare / curImpressions) * 1000 : 0;
+    curImpressions > 0 ? (curSpend / curImpressions) * 1000 : 0;
   const curCTR = curImpressions > 0 ? (curClicks / curImpressions) * 100 : 0;
-  const curCPC = curClicks > 0 ? curSpendForCompare / curClicks : 0;
+  const curCPC = curClicks > 0 ? curSpend / curClicks : 0;
 
   // Chart data: all active days in the filtered range
   const labels = activeDays.map((r) => {
@@ -226,10 +203,11 @@ export default function ExecutiveSummary({
     return map;
   }, [snapshots]);
 
+  // Sort by ROAS (most meaningful for exec view), filter to ads with actual spend
   const adsSorted = useMemo(() => {
     return Array.from(adMap.values())
       .filter((a) => a.totalSpend > 0)
-      .sort((a, b) => num(b.fields["CTR"]) - num(a.fields["CTR"]));
+      .sort((a, b) => num(b.fields["ROAS"]) - num(a.fields["ROAS"]));
   }, [adMap]);
 
   const top3 = adsSorted.slice(0, 3);
@@ -241,47 +219,58 @@ export default function ExecutiveSummary({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard
           title="Total Spend"
+          tooltip="Total ad spend across all active campaign days"
           value={formatCurrency(totalSpend)}
-          change={pctChange(curSpendForCompare, prevSpend)}
+          change={pctChange(curSpend, prevSpend)}
           subtitle={periodLabel}
         />
         <KPICard
           title="ROAS"
+          tooltip="Return on Ad Spend — revenue generated per €1 spent. Target: 2.5x"
           value={`${blendedROAS.toFixed(2)}x`}
           change={pctChange(curROAS, prevROAS)}
           subtitle={periodLabel}
         />
         <KPICard
-          title="CPA"
+          title="Cost per Order"
+          tooltip="How much ad spend it costs to get one sale"
           value={formatCurrency(blendedCPA)}
           change={pctChange(curCPA, prevCPA)}
+          invertChange
           subtitle={periodLabel}
         />
         <KPICard
-          title="Purchases"
+          title="Orders"
+          tooltip="Total purchases attributed to ads"
           value={formatNumber(totalPurchases)}
-          change={pctChange(curPurchasesForCompare, prevPurchases)}
+          change={pctChange(curPurchases, prevPurchases)}
           subtitle={periodLabel}
         />
         <KPICard
           title="CPM"
+          tooltip="Cost per 1,000 ad views"
           value={formatCurrency(avgCPM)}
           change={pctChange(curCPM, prevCPM)}
+          invertChange
         />
         <KPICard
           title="CTR"
+          tooltip="Click-through rate — % of viewers who clicked"
           value={formatPercent(avgCTR)}
           change={pctChange(curCTR, prevCTR)}
         />
         <KPICard
           title="CPC"
+          tooltip="Cost per click on the ad"
           value={formatCurrency(avgCPC)}
           change={pctChange(curCPC, prevCPC)}
+          invertChange
         />
         <KPICard
           title="Revenue"
+          tooltip="Total revenue attributed to ad campaigns"
           value={formatCurrency(totalRevenue)}
-          change={pctChange(curRevenueForCompare, prevRevenue)}
+          change={pctChange(curRevenue, prevRevenue)}
         />
       </div>
 
@@ -309,7 +298,7 @@ export default function ExecutiveSummary({
           lastActiveDate={lastActiveDate}
         />
 
-        {/* Top/Bottom Ads */}
+        {/* Top/Bottom Ads by ROAS */}
         <div
           className="rounded-xl p-5"
           style={{
@@ -321,7 +310,7 @@ export default function ExecutiveSummary({
             className="text-sm font-medium mb-3"
             style={{ color: "var(--text-secondary)" }}
           >
-            Top 3 Ads by CTR
+            Top 3 Ads by ROAS
           </h3>
           <div className="space-y-2 mb-4">
             {top3.map((ad, i) => (
@@ -333,7 +322,7 @@ export default function ExecutiveSummary({
                   {str(ad.fields["Ad Name"])}
                 </span>
                 <span className="text-green-400 font-medium whitespace-nowrap">
-                  {(num(ad.fields["CTR"]) * 100).toFixed(2)}% · €
+                  {num(ad.fields["ROAS"]).toFixed(2)}x · €
                   {ad.totalSpend.toFixed(0)}
                 </span>
               </div>
@@ -349,7 +338,7 @@ export default function ExecutiveSummary({
             className="text-sm font-medium mb-3"
             style={{ color: "var(--text-secondary)" }}
           >
-            Bottom 3 Ads by CTR
+            Bottom 3 Ads by ROAS
           </h3>
           <div className="space-y-2">
             {bottom3.map((ad, i) => (
@@ -361,7 +350,7 @@ export default function ExecutiveSummary({
                   {str(ad.fields["Ad Name"])}
                 </span>
                 <span className="text-red-400 font-medium whitespace-nowrap">
-                  {(num(ad.fields["CTR"]) * 100).toFixed(2)}% · €
+                  {num(ad.fields["ROAS"]).toFixed(2)}x · €
                   {ad.totalSpend.toFixed(0)}
                 </span>
               </div>

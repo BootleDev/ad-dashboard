@@ -53,11 +53,11 @@ export default function Diagnostics({
       (s, r) => s + num(r.fields["Clicks"]),
       0,
     );
-    const totalRevenue = allDays.reduce(
+    const totalRevenue = activeDays.reduce(
       (s, r) => s + num(r.fields["Revenue"]),
       0,
     );
-    const totalPurchases = allDays.reduce(
+    const totalPurchases = activeDays.reduce(
       (s, r) => s + num(r.fields["Total Purchases"]),
       0,
     );
@@ -89,63 +89,72 @@ export default function Diagnostics({
     return [
       {
         label: "CPM",
-        metric: "Cost per 1K impressions",
-        status: cpm < 8 ? "good" : cpm < 15 ? "warning" : "bad",
+        metric: "Cost per 1,000 views",
+        status: cpm < 14 ? "good" : cpm < 22 ? "warning" : "bad",
         value: `€${cpm.toFixed(2)}`,
         recommendation:
-          cpm >= 15
-            ? "High CPM — audience may be saturated. Try broader targeting or new audiences."
-            : cpm >= 8
-              ? "CPM is moderate. Monitor for creep."
-              : "CPM is healthy.",
+          cpm >= 22
+            ? "High CPM — audience saturated or targeting too narrow. Try broader audiences or new placements."
+            : cpm >= 14
+              ? "CPM is normal for UK/EU. Monitor for upward creep."
+              : "CPM is efficient for UK/EU market.",
       },
       {
         label: "CTR",
-        metric: "Click-through rate",
-        status: ctr >= 1.5 ? "good" : ctr >= 0.8 ? "warning" : "bad",
+        metric: "Click-through rate (all clicks)",
+        status: ctr >= 3.5 ? "good" : ctr >= 2.0 ? "warning" : "bad",
         value: `${ctr.toFixed(2)}%`,
         recommendation:
-          ctr < 0.8
-            ? "Low CTR — creatives aren't grabbing attention. Test new hooks, headlines, and thumbnails."
-            : ctr < 1.5
-              ? "CTR is below benchmark. A/B test ad copy and CTAs."
+          ctr < 2.0
+            ? "Low CTR — creatives aren't engaging. Test new hooks, headlines, and thumbnails."
+            : ctr < 3.5
+              ? "CTR is below benchmark for engaging content. A/B test ad copy and CTAs."
               : "CTR is strong — creatives are resonating.",
       },
       {
         label: "CPC",
         metric: "Cost per click",
-        status: cpc < 1 ? "good" : cpc < 2 ? "warning" : "bad",
+        status: cpc < 0.5 ? "good" : cpc < 1.0 ? "warning" : "bad",
         value: `€${cpc.toFixed(2)}`,
         recommendation:
-          cpc >= 2
+          cpc >= 1.0
             ? "High CPC — consider better audience-creative match. Relevance score may be low."
-            : cpc >= 1
+            : cpc >= 0.5
               ? "CPC is acceptable but could improve with creative refresh."
               : "CPC is efficient.",
       },
       {
-        label: "CVR → ROAS",
+        label: "ROAS",
         metric: "Return on ad spend",
         status: roas >= 2.5 ? "good" : roas >= 1.5 ? "warning" : "bad",
         value: `${roas.toFixed(2)}x`,
         recommendation:
           roas < 1.5
-            ? "ROAS below break-even. Check landing page, product-market fit, and funnel friction."
+            ? "ROAS below break-even (~1.8x for Bootle). Focus on conversion funnel and product-market fit."
             : roas < 2.5
               ? "ROAS is positive but below target (2.5x). Optimise conversion path."
               : "ROAS is at or above target — scaling opportunity.",
       },
       {
-        label: "CPA",
+        label: "Cost per Order",
         metric: "Cost per acquisition",
-        status: cpa < 20 ? "good" : cpa < 40 ? "warning" : "bad",
-        value: `€${cpa.toFixed(2)}`,
+        status:
+          cpa === 0
+            ? "warning"
+            : cpa < 30
+              ? "good"
+              : cpa < 55
+                ? "warning"
+                : "bad",
+        value: cpa > 0 ? `€${cpa.toFixed(2)}` : "No orders",
         recommendation:
-          cpa >= 40
-            ? "CPA is high — review audience quality and landing page conversion rate."
-            : cpa >= 20
-              ? "CPA is acceptable. Look for optimisation opportunities in the funnel."
-              : "CPA is efficient.",
+          cpa === 0
+            ? "No purchases recorded. Focus on conversion rate optimisation before scaling spend."
+            : cpa >= 55
+              ? "CPA exceeds product value (€55). Review audience quality and landing page conversion rate."
+              : cpa >= 30
+                ? "CPA above breakeven (~€30). Look for funnel optimisation opportunities."
+                : "CPA is profitable — below contribution margin.",
       },
     ];
   }, [metrics]);

@@ -34,7 +34,12 @@ export default function CreativeDNA({ mergedAds }: Props) {
     const results: DNAInsight[] = Object.entries(combos)
       .filter(([, v]) => v.ads.length >= 1)
       .map(([combo, { ads }]) => {
-        const ctrs = ads.map((a) => num(a["CTR"]) * 100);
+        // Spend-weighted CTR average
+        const totalSpend = ads.reduce((s, a) => s + num(a["Spend"]), 0);
+        const weightedCTR = totalSpend > 0
+          ? ads.reduce((s, a) => s + num(a["CTR"]) * 100 * num(a["Spend"]), 0) / totalSpend
+          : ads.reduce((s, a) => s + num(a["CTR"]) * 100, 0) / ads.length;
+
         const roass = ads.map((a) => num(a["ROAS"]));
         const cpas = ads.map((a) => num(a["CPA"]));
         const scores = ads.map((a) => num(a["Composite Score"]));
@@ -48,7 +53,7 @@ export default function CreativeDNA({ mergedAds }: Props) {
         return {
           combo,
           count: ads.length,
-          avgCTR: avg(ctrs),
+          avgCTR: weightedCTR,
           avgROAS: avg(roass),
           avgCPA: avg(cpas),
           avgScore: avg(scores),
@@ -60,22 +65,28 @@ export default function CreativeDNA({ mergedAds }: Props) {
     return results;
   }, [mergedAds]);
 
-  // Compute overall averages for comparison
+  // Compute overall spend-weighted averages for comparison
   const overallAvg = useMemo(() => {
     if (mergedAds.length === 0)
       return { ctr: 0, roas: 0, cpa: 0, score: 0 };
-    const avg = (field: string, mult = 1) =>
-      mergedAds.reduce((a, ad) => a + num(ad[field]) * mult, 0) /
-      mergedAds.length;
+
+    const totalSpend = mergedAds.reduce((s, a) => s + num(a["Spend"]), 0);
+    const ctr = totalSpend > 0
+      ? mergedAds.reduce((s, a) => s + num(a["CTR"]) * 100 * num(a["Spend"]), 0) / totalSpend
+      : mergedAds.reduce((s, a) => s + num(a["CTR"]) * 100, 0) / mergedAds.length;
+
+    const avg = (field: string) =>
+      mergedAds.reduce((a, ad) => a + num(ad[field]), 0) / mergedAds.length;
+
     return {
-      ctr: avg("CTR", 100),
+      ctr,
       roas: avg("ROAS"),
       cpa: avg("CPA"),
       score: avg("Composite Score"),
     };
   }, [mergedAds]);
 
-  // Generate narrative insights
+  // Generate narrative insights — require 2+ ads per combo for pattern claims
   const narratives = useMemo(() => {
     const lines: string[] = [];
     const top = insights[0];
@@ -85,9 +96,9 @@ export default function CreativeDNA({ mergedAds }: Props) {
       );
     }
 
-    // Find combos that beat the average by >50%
+    // Find combos with 2+ ads that beat the average by >50%
     for (const i of insights) {
-      if (i.avgCTR > overallAvg.ctr * 1.5 && i.avgCTR > 0) {
+      if (i.count >= 2 && i.avgCTR > overallAvg.ctr * 1.5 && i.avgCTR > 0) {
         lines.push(
           `${i.combo} drives ${(i.avgCTR / Math.max(0.01, overallAvg.ctr)).toFixed(1)}x the average CTR.`
         );
@@ -95,8 +106,8 @@ export default function CreativeDNA({ mergedAds }: Props) {
       }
     }
 
-    // Find worst performer
-    const worst = insights[insights.length - 1];
+    // Find worst performer with 2+ ads
+    const worst = [...insights].reverse().find((i) => i.count >= 2);
     if (worst && worst.avgScore < overallAvg.score * 0.5 && insights.length > 2) {
       lines.push(
         `Underperformer: ${worst.combo} scores ${worst.avgScore.toFixed(1)} — consider retiring this combination.`
@@ -122,10 +133,10 @@ export default function CreativeDNA({ mergedAds }: Props) {
         Creative DNA Analysis
       </h3>
 
-      {/* Narrative insights */}
+      {/* Narrative insights — promoted to primary text color */}
       <div className="space-y-2 mb-4">
         {narratives.map((line, i) => (
-          <p key={i} className="text-xs" style={{ color: "var(--text-secondary)" }}>
+          <p key={i} className="text-xs border-l-2 pl-3 py-0.5 border-blue-500/50">
             {line}
           </p>
         ))}
@@ -154,7 +165,7 @@ export default function CreativeDNA({ mergedAds }: Props) {
             </tr>
           </thead>
           <tbody>
-            {insights.slice(0, 10).map((row, i) => (
+            {insights.slice(0, 12).map((row, i) => (
               <tr
                 key={i}
                 className="hover:bg-white/5 transition-colors"

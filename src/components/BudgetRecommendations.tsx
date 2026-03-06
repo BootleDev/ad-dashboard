@@ -33,6 +33,8 @@ export default function BudgetRecommendations({
       adsWithSpend.reduce((s, a) => s + num(a["CTR"]), 0) / adsWithSpend.length;
     const avgCPA =
       adsWithSpend.reduce((s, a) => s + num(a["CPA"]), 0) / adsWithSpend.length;
+    const avgCPC =
+      adsWithSpend.reduce((s, a) => s + num(a["CPC"]), 0) / adsWithSpend.length;
     const totalSpend = adsWithSpend.reduce((s, a) => s + num(a["Spend"]), 0);
 
     for (const ad of adsWithSpend) {
@@ -41,28 +43,54 @@ export default function BudgetRecommendations({
       const ctr = num(ad["CTR"]);
       const cpa = num(ad["CPA"]);
       const roas = num(ad["ROAS"]);
+      const cpc = num(ad["CPC"]);
       const score = num(ad["Composite Score"]);
+      const purchases = num(ad["Purchases"]);
       const spendShare = totalSpend > 0 ? spend / totalSpend : 0;
 
       // High performer with low spend share → scale up
-      if (score >= 7 && ctr > avgCTR * 1.2 && spendShare < 0.3) {
+      // When score is 0 (not populated), fall back to ROAS + CTR check
+      const isHighPerformer = score > 0
+        ? score >= 6 && ctr > avgCTR * 1.2
+        : roas >= 1.5 && ctr > avgCTR * 1.2;
+
+      if (isHighPerformer && spendShare < 0.3) {
         recs.push({
           action: "increase",
           adName: name,
-          reason: `Score ${score.toFixed(1)}, CTR ${(ctr * 100).toFixed(1)}% (${((ctr / Math.max(0.001, avgCTR)) * 100 - 100).toFixed(0)}% above avg)`,
+          reason: score > 0
+            ? `Score ${score.toFixed(1)}, CTR ${(ctr * 100).toFixed(1)}% (${((ctr / Math.max(0.001, avgCTR)) * 100 - 100).toFixed(0)}% above avg)`
+            : `ROAS ${roas.toFixed(2)}x, CTR ${(ctr * 100).toFixed(1)}% (${((ctr / Math.max(0.001, avgCTR)) * 100 - 100).toFixed(0)}% above avg)`,
           currentSpend: spend,
-          suggestedChange: `+${Math.round(spend * 0.5)}€/day`,
+          suggestedChange: "Increase budget",
         });
       }
 
       // Low performer with high spend → scale down
-      if (score <= 3 && spend > totalSpend * 0.1) {
+      const isLowPerformer = score > 0
+        ? score <= 3
+        : roas < 1.0 && cpc > avgCPC * 1.3;
+
+      if (isLowPerformer && spend > totalSpend * 0.1) {
         recs.push({
           action: "decrease",
           adName: name,
-          reason: `Score ${score.toFixed(1)}, consuming ${(spendShare * 100).toFixed(0)}% of budget`,
+          reason: score > 0
+            ? `Score ${score.toFixed(1)}, consuming ${(spendShare * 100).toFixed(0)}% of budget`
+            : `ROAS ${roas.toFixed(2)}x, CPC ${((cpc / Math.max(0.01, avgCPC)) * 100).toFixed(0)}% of avg, consuming ${(spendShare * 100).toFixed(0)}% of budget`,
           currentSpend: spend,
-          suggestedChange: `-${Math.round(spend * 0.5)}€/day`,
+          suggestedChange: "Reduce budget",
+        });
+      }
+
+      // Zero purchases after significant spend → pause
+      if (purchases === 0 && spend > 50 && roas === 0) {
+        recs.push({
+          action: "pause",
+          adName: name,
+          reason: `€${spend.toFixed(0)} spent with zero conversions`,
+          currentSpend: spend,
+          suggestedChange: "Pause",
         });
       }
 
@@ -77,14 +105,14 @@ export default function BudgetRecommendations({
         });
       }
 
-      // High frequency (fatigue) → reduce
-      if (num(ad["Frequency"]) > 3 && spend > 5) {
+      // High frequency (fatigue) → reduce — lowered from 3 to 1.8 for Bootle's scale
+      if (num(ad["Frequency"]) > 1.8 && spend > 5) {
         recs.push({
           action: "decrease",
           adName: name,
-          reason: `Frequency ${num(ad["Frequency"]).toFixed(1)} — audience fatigue`,
+          reason: `Frequency ${num(ad["Frequency"]).toFixed(1)} — audience seeing ad too often`,
           currentSpend: spend,
-          suggestedChange: `-${Math.round(spend * 0.3)}€/day`,
+          suggestedChange: "Reduce budget or refresh creative",
         });
       }
     }

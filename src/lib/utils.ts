@@ -16,7 +16,7 @@ export function pctChange(
   current: number,
   previous: number,
 ): number | undefined {
-  if (previous === 0) return current > 0 ? undefined : 0;
+  if (previous === 0) return undefined;
   return ((current - previous) / previous) * 100;
 }
 
@@ -24,7 +24,7 @@ export function pctChange(
 export function deduplicateByDate(records: AirtableRecord[]): AirtableRecord[] {
   const seen = new Set<string>();
   return records.filter((r) => {
-    const date = str(r.fields.Date);
+    const date = str(r.fields.Date).split("T")[0];
     if (!date || seen.has(date)) return false;
     seen.add(date);
     return true;

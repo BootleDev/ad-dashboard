@@ -78,8 +78,7 @@ export default function DashboardPage() {
     [data, dateRange],
   );
   const filteredAlerts = useMemo(
-    () =>
-      data ? filterByDateRange(data.alerts, "Alert Date", dateRange) : [],
+    () => (data ? filterByDateRange(data.alerts, "Alert Date", dateRange) : []),
     [data, dateRange],
   );
 
@@ -122,7 +121,7 @@ export default function DashboardPage() {
     <div className="min-h-screen">
       {/* Header */}
       <header
-        className="sticky top-0 z-10 px-6 py-4 flex items-center justify-between gap-4"
+        className="sticky top-0 z-10 px-4 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
         style={{
           background: "var(--bg-primary)",
           borderBottom: "1px solid var(--border)",
@@ -132,10 +131,7 @@ export default function DashboardPage() {
         <div className="shrink-0">
           <h1 className="text-lg font-bold">Bootle Ad Intelligence</h1>
           <div className="flex items-center gap-2">
-            <p
-              className="text-xs"
-              style={{ color: "var(--text-secondary)" }}
-            >
+            <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
               {latestDataDate
                 ? `Last data: ${latestDataDate}`
                 : loading
@@ -155,8 +151,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {data && <DateRangeFilter value={dateRange} onChange={setDateRange} />}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+          {data && (
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
+          )}
 
           {/* Tab Nav */}
           <nav

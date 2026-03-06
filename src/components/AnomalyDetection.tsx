@@ -29,20 +29,25 @@ export default function AnomalyDetection({
 
     // Only look at days with activity
     const active = sorted.filter((r) => num(r.fields["Total Spend"]) > 0);
-    if (active.length < 5) return [];
+    if (active.length < 10) return [];
 
     const metrics = [
       { key: "CPM", label: "CPM", threshold: 2.0 },
-      { key: "Blended CTR", label: "CTR", threshold: 2.0 },
+      { key: "Blended CTR", label: "CTR", threshold: 2.5 },
       { key: "CPC", label: "CPC", threshold: 2.0 },
-      { key: "CPA", label: "CPA", threshold: 2.0 },
+      { key: "CPA", label: "CPA", threshold: 2.5, minDataPoints: 10 },
       { key: "Total Spend", label: "Spend", threshold: 2.5 },
     ];
 
     const found: Anomaly[] = [];
 
-    for (const { key, label, threshold } of metrics) {
+    for (const { key, label, threshold, minDataPoints } of metrics) {
       const values = active.map((r) => num(r.fields[key]));
+
+      // Skip metrics with too few non-zero data points
+      const nonZero = values.filter((v) => v > 0);
+      if (minDataPoints && nonZero.length < minDataPoints) continue;
+
       const mean = values.reduce((a, b) => a + b, 0) / values.length;
       const stdDev = Math.sqrt(
         values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length,
@@ -87,17 +92,14 @@ export default function AnomalyDetection({
         >
           Anomaly Detection
         </h3>
-        <p className="text-xs text-green-400">
-          No anomalies detected in recent performance.
+        <p
+          className="text-xs"
+          style={{ color: campaignsPaused ? "var(--text-secondary)" : undefined }}
+        >
+          {campaignsPaused
+            ? "Anomaly detection inactive — campaigns paused. No recent data to analyse."
+            : "No anomalies detected in recent performance."}
         </p>
-        {campaignsPaused && (
-          <p
-            className="text-xs mt-2"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            Based on historical data — no recent activity.
-          </p>
-        )}
       </div>
     );
   }

@@ -5,6 +5,8 @@ interface KPICardProps {
   value: string;
   change?: number;
   subtitle?: string;
+  tooltip?: string;
+  invertChange?: boolean;
 }
 
 export default function KPICard({
@@ -12,12 +14,19 @@ export default function KPICard({
   value,
   change,
   subtitle,
+  tooltip,
+  invertChange,
 }: KPICardProps) {
-  const isPositive = change !== undefined && change >= 0;
-  const changeColor =
-    change === undefined ? "" : isPositive ? "text-green-400" : "text-red-400";
-  const arrow = change === undefined ? "" : isPositive ? "↑" : "↓";
-  const noPriorData = change === undefined;
+  const isPositive = change !== undefined && change > 0;
+  const isNegative = change !== undefined && change < 0;
+  const isGood = invertChange ? isNegative : isPositive;
+  const isBad = invertChange ? isPositive : isNegative;
+  const changeColor = isGood
+    ? "text-green-400"
+    : isBad
+      ? "text-red-400"
+      : "";
+  const arrow = isPositive ? "↑" : isNegative ? "↓" : "";
 
   return (
     <div
@@ -28,10 +37,18 @@ export default function KPICard({
       }}
     >
       <span
-        className="text-xs font-medium"
+        className="text-xs font-medium flex items-center gap-1"
         style={{ color: "var(--text-secondary)" }}
       >
         {title}
+        {tooltip && (
+          <span
+            title={tooltip}
+            className="cursor-help opacity-50 hover:opacity-100"
+          >
+            i
+          </span>
+        )}
       </span>
       <span className="text-2xl font-bold">{value}</span>
       <div className="flex items-center gap-2">
@@ -39,11 +56,11 @@ export default function KPICard({
           <span className={`text-xs font-medium ${changeColor}`}>
             {arrow} {Math.abs(change).toFixed(1)}%
           </span>
-        ) : noPriorData ? (
+        ) : (
           <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
             no prior data
           </span>
-        ) : null}
+        )}
         {subtitle && (
           <span className="text-xs" style={{ color: "var(--text-secondary)" }}>
             {subtitle}

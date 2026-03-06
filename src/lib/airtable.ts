@@ -27,15 +27,17 @@ async function fetchAllRecords(
     sort?: Array<{ field: string; direction: "asc" | "desc" }>;
     fields?: string[];
     maxRecords?: number;
-  } = {}
+  } = {},
 ): Promise<AirtableRecord[]> {
   const allRecords: AirtableRecord[] = [];
   let offset: string | undefined;
 
   do {
     const params = new URLSearchParams();
-    if (options.filterByFormula) params.set("filterByFormula", options.filterByFormula);
-    if (options.maxRecords) params.set("maxRecords", String(options.maxRecords));
+    if (options.filterByFormula)
+      params.set("filterByFormula", options.filterByFormula);
+    if (options.maxRecords)
+      params.set("maxRecords", String(options.maxRecords));
     if (offset) params.set("offset", offset);
 
     if (options.sort) {
@@ -52,7 +54,7 @@ async function fetchAllRecords(
     const url = `${BASE_URL}/${BASE_ID}/${tableId}?${params.toString()}`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${API_KEY}` },
-      next: { revalidate: 300 }, // cache 5 min
+      next: { revalidate: 1800 }, // cache 30 min (n8n refreshes every 6h)
     });
 
     if (!res.ok) {
