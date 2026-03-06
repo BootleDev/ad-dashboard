@@ -33,22 +33,58 @@ export default function Diagnostics({
   tags,
   campaignsPaused,
 }: Props) {
-  // Find last day with actual activity (spend > 0), fall back to most recent
-  const latest = useMemo(() => {
+  // Aggregate across all active days (spend > 0) for reliable diagnostics
+  const { metrics, latestDate } = useMemo(() => {
     const sorted = [...dailyAggregates].sort((a, b) =>
       String(b.fields.Date ?? "").localeCompare(String(a.fields.Date ?? "")),
     );
-    const active = sorted.find((r) => num(r.fields["Total Spend"]) > 0);
-    return (active || sorted[0])?.fields || {};
+    const activeDays = sorted.filter((r) => num(r.fields["Total Spend"]) > 0);
+    const allDays = sorted;
+
+    const totalSpend = activeDays.reduce(
+      (s, r) => s + num(r.fields["Total Spend"]),
+      0,
+    );
+    const totalImpressions = activeDays.reduce(
+      (s, r) => s + num(r.fields["Impressions"]),
+      0,
+    );
+    const totalClicks = activeDays.reduce(
+      (s, r) => s + num(r.fields["Clicks"]),
+      0,
+    );
+    const totalRevenue = allDays.reduce(
+      (s, r) => s + num(r.fields["Revenue"]),
+      0,
+    );
+    const totalPurchases = allDays.reduce(
+      (s, r) => s + num(r.fields["Total Purchases"]),
+      0,
+    );
+
+    const lastActive = activeDays[0];
+    const date = lastActive
+      ? String(lastActive.fields.Date ?? "").split("T")[0]
+      : "";
+
+    return {
+      metrics: {
+        cpm: totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0,
+        ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+        cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
+        roas: totalSpend > 0 ? totalRevenue / totalSpend : 0,
+        cpa: totalPurchases > 0 ? totalSpend / totalPurchases : 0,
+        impressions: totalImpressions,
+        clicks: totalClicks,
+        purchases: totalPurchases,
+      },
+      latestDate: date,
+    };
   }, [dailyAggregates]);
 
   // Diagnostic decision tree
   const nodes: DiagNode[] = useMemo(() => {
-    const cpm = num(latest["CPM"]);
-    const ctr = num(latest["Blended CTR"]);
-    const cpc = num(latest["CPC"]);
-    const roas = num(latest["ROAS"]);
-    const cpa = num(latest["CPA"]);
+    const { cpm, ctr, cpc, roas, cpa } = metrics;
 
     return [
       {
@@ -112,7 +148,7 @@ export default function Diagnostics({
               : "CPA is efficient.",
       },
     ];
-  }, [latest]);
+  }, [metrics]);
 
   const statusColors = {
     good: "border-green-500/40 bg-green-500/10",
@@ -126,10 +162,10 @@ export default function Diagnostics({
     bad: "bg-red-400",
   };
 
-  // Funnel data from latest
-  const impressions = num(latest["Impressions"]);
-  const clicks = num(latest["Clicks"]);
-  const purchases = num(latest["Total Purchases"]);
+  // Funnel data from aggregated metrics
+  const impressions = metrics.impressions;
+  const clicks = metrics.clicks;
+  const purchases = metrics.purchases;
 
   // Use Math.max(1, val) to prevent log(0) crash
   const funnelData = {
@@ -212,7 +248,7 @@ export default function Diagnostics({
           className="text-sm font-medium mb-4"
           style={{ color: "var(--text-secondary)" }}
         >
-          Diagnostic Flow (Latest Day)
+          Diagnostic Flow (All Active Days)
         </h3>
         <div className="flex flex-col md:flex-row gap-3">
           {nodes.map((node, i) => (
@@ -304,7 +340,7 @@ export default function Diagnostics({
           )}
         </div>
 
-        <ChartCard title="Funnel (Latest Day)">
+        <ChartCard title="Funnel (All Active Days)">
           <Bar data={funnelData} options={funnelOptions} />
         </ChartCard>
       </div>
