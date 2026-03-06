@@ -46,7 +46,7 @@ export default function ExecutiveSummary({
     [dailyAggregates],
   );
 
-  // Use active days (spend > 0) for KPIs
+  // Active days (spend > 0) for rate-based KPIs; all days for volume KPIs
   const activeDays = useMemo(
     () => sorted.filter((r) => num(r.fields["Total Spend"]) > 0),
     [sorted],
@@ -61,8 +61,7 @@ export default function ExecutiveSummary({
   );
 
   // Date range label
-  const firstDate =
-    str(activeDays[0]?.fields.Date).split("T")[0] || "—";
+  const firstDate = str(activeDays[0]?.fields.Date).split("T")[0] || "—";
   const lastDate =
     str(activeDays[activeDays.length - 1]?.fields.Date).split("T")[0] || "—";
   const periodLabel =
@@ -77,15 +76,31 @@ export default function ExecutiveSummary({
     return sum(arr, field) / arr.length;
   };
 
-  // Full-period KPIs (over ALL active days in the filtered range)
+  // Impression-weighted average for rate metrics
+  const weightedAvg = (arr: AirtableRecord[], field: string) => {
+    const totalImpressions = sum(arr, "Impressions");
+    if (totalImpressions === 0) return 0;
+    return (
+      arr.reduce(
+        (acc, r) => acc + num(r.fields[field]) * num(r.fields["Impressions"]),
+        0,
+      ) / totalImpressions
+    );
+  };
+
+  // Full-period KPIs — volume metrics use ALL days, rates use active days
   const totalSpend = sum(activeDays, "Total Spend");
-  const totalRevenue = sum(activeDays, "Revenue");
-  const totalPurchases = sum(activeDays, "Total Purchases");
+  const totalRevenue = sum(sorted, "Revenue");
+  const totalPurchases = sum(sorted, "Total Purchases");
   const blendedROAS = totalSpend > 0 ? totalRevenue / totalSpend : 0;
   const blendedCPA = totalPurchases > 0 ? totalSpend / totalPurchases : 0;
-  const avgCPM = avg(activeDays, "CPM");
-  const avgCTR = avg(activeDays, "Blended CTR");
-  const avgCPC = avg(activeDays, "CPC");
+  const totalImpressions = sum(activeDays, "Impressions");
+  const totalClicks = sum(activeDays, "Clicks");
+  const avgCPM =
+    totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0;
+  const avgCTR =
+    totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
+  const avgCPC = totalClicks > 0 ? totalSpend / totalClicks : 0;
 
   // Previous period KPIs for comparison
   const prevSpend = sum(prevPeriod, "Total Spend");
@@ -93,9 +108,13 @@ export default function ExecutiveSummary({
   const prevPurchases = sum(prevPeriod, "Total Purchases");
   const prevROAS = prevSpend > 0 ? prevRevenue / prevSpend : 0;
   const prevCPA = prevPurchases > 0 ? prevSpend / prevPurchases : 0;
-  const prevCPM = avg(prevPeriod, "CPM");
-  const prevCTR = avg(prevPeriod, "Blended CTR");
-  const prevCPC = avg(prevPeriod, "CPC");
+  const prevImpressions = sum(prevPeriod, "Impressions");
+  const prevClicks = sum(prevPeriod, "Clicks");
+  const prevCPM =
+    prevImpressions > 0 ? (prevSpend / prevImpressions) * 1000 : 0;
+  const prevCTR =
+    prevImpressions > 0 ? (prevClicks / prevImpressions) * 100 : 0;
+  const prevCPC = prevClicks > 0 ? prevSpend / prevClicks : 0;
   const curSpendForCompare = sum(currentPeriod, "Total Spend");
   const curRevenueForCompare = sum(currentPeriod, "Revenue");
   const curPurchasesForCompare = sum(currentPeriod, "Total Purchases");
@@ -105,9 +124,12 @@ export default function ExecutiveSummary({
     curPurchasesForCompare > 0
       ? curSpendForCompare / curPurchasesForCompare
       : 0;
-  const curCPM = avg(currentPeriod, "CPM");
-  const curCTR = avg(currentPeriod, "Blended CTR");
-  const curCPC = avg(currentPeriod, "CPC");
+  const curImpressions = sum(currentPeriod, "Impressions");
+  const curClicks = sum(currentPeriod, "Clicks");
+  const curCPM =
+    curImpressions > 0 ? (curSpendForCompare / curImpressions) * 1000 : 0;
+  const curCTR = curImpressions > 0 ? (curClicks / curImpressions) * 100 : 0;
+  const curCPC = curClicks > 0 ? curSpendForCompare / curClicks : 0;
 
   // Chart data: all active days in the filtered range
   const labels = activeDays.map((r) => {
@@ -317,10 +339,7 @@ export default function ExecutiveSummary({
               </div>
             ))}
             {top3.length === 0 && (
-              <p
-                className="text-xs"
-                style={{ color: "var(--text-secondary)" }}
-              >
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
                 No data
               </p>
             )}
@@ -348,10 +367,7 @@ export default function ExecutiveSummary({
               </div>
             ))}
             {bottom3.length === 0 && (
-              <p
-                className="text-xs"
-                style={{ color: "var(--text-secondary)" }}
-              >
+              <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
                 No data
               </p>
             )}
