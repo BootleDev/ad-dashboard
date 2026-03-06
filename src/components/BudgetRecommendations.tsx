@@ -197,8 +197,9 @@ export default function BudgetRecommendations({
             color: "rgb(168, 85, 247)",
           }}
         >
-          No conversion data available (pixel tracking issue). Enable Shopify
-          data for accurate recommendations.
+          No conversion data available (pixel tracking issue). Per-ad budget
+          recommendations require ad-level conversion tracking. See Diagnostics
+          for Shopify-corrected totals.
         </p>
       )}
 

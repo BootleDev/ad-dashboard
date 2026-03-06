@@ -357,8 +357,9 @@ export default function CreativePerformance({
               className="text-xs text-center"
               style={{ color: "var(--text-secondary)" }}
             >
-              CPA data unavailable for {Math.round(zeroCpaRatio * 100)}% of ads
-              (pixel tracking issue). Chart hidden to avoid misleading display.
+              {showShopify
+                ? "Ad-level CPA not available from Shopify data. Chart hidden — see Diagnostics for Shopify-corrected totals."
+                : `CPA data unavailable for ${Math.round(zeroCpaRatio * 100)}% of ads (pixel tracking issue). Chart hidden to avoid misleading display.`}
             </p>
           </div>
         ) : (

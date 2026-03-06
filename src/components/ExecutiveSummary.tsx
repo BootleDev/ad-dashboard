@@ -418,8 +418,10 @@ export default function ExecutiveSummary({
             Attribution Gap: {attributionGap.toFixed(0)}%
           </span>
           <span style={{ color: "var(--text-secondary)" }}>
-            {shopifyOrders} Shopify orders vs {totalPurchases} Meta-tracked —
-            pixel missed {shopifyOrders - totalPurchases} orders
+            {shopifyOrders} Shopify orders vs {totalPurchases} Meta-tracked
+            {shopifyOrders >= totalPurchases
+              ? ` — pixel missed ${shopifyOrders - totalPurchases} orders`
+              : ` — Meta over-attributed by ${totalPurchases - shopifyOrders} orders`}
           </span>
         </div>
       )}
