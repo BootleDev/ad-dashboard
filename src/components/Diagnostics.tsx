@@ -171,20 +171,21 @@ export default function Diagnostics({
     },
   };
 
-  // Merge snapshots with tags for budget recommendations
+  // Merge snapshots with tags for budget recommendations — latest snapshot per unique ad
   const tagMap = useMemo(
     () => new Map(tags.map((t) => [str(t.fields["Ad ID"]), t.fields])),
     [tags],
   );
-  const latestSnapDate = snapshots[0]?.fields["Snapshot Date"];
   const mergedAds = useMemo(() => {
-    return snapshots
-      .filter((s) => s.fields["Snapshot Date"] === latestSnapDate)
-      .map((s) => {
-        const tag = tagMap.get(str(s.fields["Ad ID"])) || {};
-        return { ...s.fields, ...tag };
-      });
-  }, [snapshots, latestSnapDate, tagMap]);
+    const seen = new Map<string, Record<string, unknown>>();
+    for (const s of snapshots) {
+      const adId = str(s.fields["Ad ID"]);
+      if (!adId || seen.has(adId)) continue;
+      const tag = tagMap.get(adId) || {};
+      seen.set(adId, { ...s.fields, ...tag });
+    }
+    return Array.from(seen.values());
+  }, [snapshots, tagMap]);
 
   // Alert-based recommendations
   const recentAlerts = alerts.slice(0, 10).map((a) => a.fields);

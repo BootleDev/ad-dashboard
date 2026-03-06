@@ -19,15 +19,16 @@ export async function POST(request: Request) {
     const recentDaily = dailySorted.slice(0, 14);
     const recentAlerts = data.alerts.slice(0, 20).map((r) => r.fields);
 
-    // Merge snapshots with tags
+    // Merge snapshots with tags — latest snapshot per unique ad
     const tagMap = new Map(data.tags.map((t) => [t.fields["Ad ID"], t.fields]));
-    const latestDate = data.snapshots[0]?.fields["Snapshot Date"];
-    const latestAds = data.snapshots
-      .filter((s) => s.fields["Snapshot Date"] === latestDate)
-      .map((s) => {
-        const tag = tagMap.get(s.fields["Ad ID"]) || {};
-        return { ...s.fields, ...tag };
-      });
+    const seenAds = new Map<string, Record<string, unknown>>();
+    for (const s of data.snapshots) {
+      const adId = String(s.fields["Ad ID"] ?? "");
+      if (!adId || seenAds.has(adId)) continue;
+      const tag = tagMap.get(s.fields["Ad ID"]) || {};
+      seenAds.set(adId, { ...s.fields, ...tag });
+    }
+    const latestAds = Array.from(seenAds.values());
 
     const context = `You are an expert paid media analyst for Bootle, a Swedish modular drinkware brand.
 You have access to the latest ad performance data.
@@ -35,7 +36,7 @@ You have access to the latest ad performance data.
 DAILY AGGREGATES (last 14 days):
 ${JSON.stringify(recentDaily, null, 2)}
 
-LATEST AD SNAPSHOTS (${latestDate}):
+LATEST AD SNAPSHOTS (${latestAds.length} unique ads):
 ${JSON.stringify(latestAds, null, 2)}
 
 RECENT ALERTS:

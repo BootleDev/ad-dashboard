@@ -8,6 +8,7 @@ import ChartCard from "./ChartCard";
 import AlertsFeed from "./AlertsFeed";
 import ChatBox from "./ChatBox";
 import AnomalyDetection from "./AnomalyDetection";
+import { useMemo } from "react";
 import {
   num,
   str,
@@ -135,14 +136,34 @@ export default function ExecutiveSummary({
     ],
   };
 
-  // Top/Bottom ads by ROAS from latest snapshot
-  const latestDate = snapshots[0]?.fields["Snapshot Date"];
-  const latestAds = snapshots.filter(
-    (s) => s.fields["Snapshot Date"] === latestDate,
-  );
-  const adsSorted = [...latestAds]
-    .filter((a) => num(a.fields["ROAS"]) > 0)
-    .sort((a, b) => num(b.fields["ROAS"]) - num(a.fields["ROAS"]));
+  // Top/Bottom ads by ROAS — latest snapshot per unique ad, aggregate spend
+  const adMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { fields: Record<string, unknown>; totalSpend: number }
+    >();
+    for (const s of snapshots) {
+      const adId = str(s.fields["Ad ID"]);
+      if (!adId) continue;
+      const existing = map.get(adId);
+      if (!existing) {
+        map.set(adId, {
+          fields: { ...s.fields },
+          totalSpend: num(s.fields["Spend"]),
+        });
+      } else {
+        existing.totalSpend += num(s.fields["Spend"]);
+      }
+    }
+    return map;
+  }, [snapshots]);
+
+  const adsSorted = useMemo(() => {
+    return Array.from(adMap.values())
+      .filter((a) => a.totalSpend > 0)
+      .sort((a, b) => num(b.fields["CTR"]) - num(a.fields["CTR"]));
+  }, [adMap]);
+
   const top3 = adsSorted.slice(0, 3);
   const bottom3 = adsSorted.slice(-3).reverse();
 
@@ -225,7 +246,7 @@ export default function ExecutiveSummary({
             className="text-sm font-medium mb-3"
             style={{ color: "var(--text-secondary)" }}
           >
-            Top 3 Ads by ROAS
+            Top 3 Ads by CTR
           </h3>
           <div className="space-y-2 mb-4">
             {top3.map((ad, i) => (
@@ -237,7 +258,8 @@ export default function ExecutiveSummary({
                   {str(ad.fields["Ad Name"])}
                 </span>
                 <span className="text-green-400 font-medium whitespace-nowrap">
-                  {num(ad.fields["ROAS"]).toFixed(2)}x
+                  {(num(ad.fields["CTR"]) * 100).toFixed(2)}% · €
+                  {ad.totalSpend.toFixed(0)}
                 </span>
               </div>
             ))}
@@ -252,7 +274,7 @@ export default function ExecutiveSummary({
             className="text-sm font-medium mb-3"
             style={{ color: "var(--text-secondary)" }}
           >
-            Bottom 3 Ads by ROAS
+            Bottom 3 Ads by CTR
           </h3>
           <div className="space-y-2">
             {bottom3.map((ad, i) => (
@@ -264,7 +286,8 @@ export default function ExecutiveSummary({
                   {str(ad.fields["Ad Name"])}
                 </span>
                 <span className="text-red-400 font-medium whitespace-nowrap">
-                  {num(ad.fields["ROAS"]).toFixed(2)}x
+                  {(num(ad.fields["CTR"]) * 100).toFixed(2)}% · €
+                  {ad.totalSpend.toFixed(0)}
                 </span>
               </div>
             ))}

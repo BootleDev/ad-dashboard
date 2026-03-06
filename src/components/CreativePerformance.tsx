@@ -22,21 +22,23 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("score");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  // Merge snapshots with tags (latest snapshot date)
+  // Merge snapshots with tags — latest snapshot per unique ad (not just latest date)
   const tagMap = useMemo(
     () => new Map(tags.map((t) => [str(t.fields["Ad ID"]), t.fields])),
     [tags],
   );
 
-  const latestDate = snapshots[0]?.fields["Snapshot Date"];
   const mergedAds = useMemo(() => {
-    return snapshots
-      .filter((s) => s.fields["Snapshot Date"] === latestDate)
-      .map((s) => {
-        const tag = tagMap.get(str(s.fields["Ad ID"])) || {};
-        return { ...s.fields, ...tag };
-      });
-  }, [snapshots, latestDate, tagMap]);
+    // snapshots are sorted by date desc — first occurrence of each Ad ID is the latest
+    const seen = new Map<string, Record<string, unknown>>();
+    for (const s of snapshots) {
+      const adId = str(s.fields["Ad ID"]);
+      if (!adId || seen.has(adId)) continue;
+      const tag = tagMap.get(adId) || {};
+      seen.set(adId, { ...s.fields, ...tag });
+    }
+    return Array.from(seen.values());
+  }, [snapshots, tagMap]);
 
   // Sort
   const sorted = useMemo(() => {
