@@ -223,19 +223,28 @@ export default function CreativePerformance({
 
   return (
     <div className="space-y-6">
-      {/* Shopify context banner */}
-      {showShopify && (
+      {/* Pixel broken warning */}
+      {zeroCpaRatio > 0.8 && (
         <div
-          className="rounded-xl px-4 py-3 text-xs"
+          className="rounded-xl px-4 py-3 text-sm flex items-center gap-2"
           style={{
-            background: "rgba(168, 85, 247, 0.08)",
-            border: "1px solid rgba(168, 85, 247, 0.2)",
-            color: "#a855f7",
+            background: "rgba(239, 68, 68, 0.1)",
+            border: "1px solid rgba(239, 68, 68, 0.3)",
+            color: "rgb(248, 113, 113)",
           }}
         >
-          Ad-level ROAS uses Meta attribution only. Shopify data provides
-          accurate totals (see Executive Summary) but cannot be attributed to
-          individual ads.
+          <span className="text-base">&#9888;</span>
+          <div>
+            <span className="font-semibold">
+              ROAS &amp; Revenue data is unreliable.
+            </span>{" "}
+            Meta pixel was broken during campaigns —{" "}
+            {Math.round(zeroCpaRatio * 100)}% of ads show zero conversions.
+            {showShopify
+              ? " True totals are on the Executive Summary tab (Shopify data)."
+              : " Enable Shopify Data toggle for accurate totals."}{" "}
+            Traffic metrics (Score, Spend, Hook Rate) are accurate.
+          </div>
         </div>
       )}
 
@@ -266,9 +275,9 @@ export default function CreativePerformance({
                   [
                     ["name", "Ad Name"],
                     ["score", "Score"],
-                    ["roas", "ROAS"],
+                    ["roas", zeroCpaRatio > 0.8 ? "ROAS *" : "ROAS"],
                     ["spend", "Spend"],
-                    ["cpa", "CPA"],
+                    ["cpa", zeroCpaRatio > 0.8 ? "CPA *" : "CPA"],
                     ["hookRate", "Hook Rate"],
                   ] as [SortKey, string][]
                 ).map(([key, label]) => (
@@ -299,8 +308,10 @@ export default function CreativePerformance({
             <tbody>
               {sorted.map((ad, i) => {
                 const roas = num(ad["ROAS"]);
-                const roasColor =
-                  roas >= 2.5
+                const pixelBroken = zeroCpaRatio > 0.8;
+                const roasColor = pixelBroken
+                  ? "text-gray-600"
+                  : roas >= 2.5
                     ? "text-green-400"
                     : roas >= 1
                       ? "text-amber-400"
@@ -324,7 +335,11 @@ export default function CreativePerformance({
                     <td className="px-4 py-3">
                       €{num(ad["Spend"]).toFixed(2)}
                     </td>
-                    <td className="px-4 py-3">€{num(ad["CPA"]).toFixed(2)}</td>
+                    <td
+                      className={`px-4 py-3 ${pixelBroken ? "text-gray-600" : ""}`}
+                    >
+                      €{num(ad["CPA"]).toFixed(2)}
+                    </td>
                     <td className="px-4 py-3">
                       {num(ad["Hook Rate"]).toFixed(1)}%
                     </td>
@@ -359,7 +374,13 @@ export default function CreativePerformance({
 
       {/* Charts Row */}
       <div className="grid md:grid-cols-2 gap-4">
-        <ChartCard title="Avg ROAS by Format">
+        <ChartCard
+          title={
+            zeroCpaRatio > 0.8
+              ? "Avg ROAS by Format (unreliable — pixel broken)"
+              : "Avg ROAS by Format"
+          }
+        >
           <Bar data={formatChartData} options={defaultOptions} />
         </ChartCard>
         <ChartCard title="Avg Hook Rate by Hook Type">
