@@ -6,7 +6,6 @@ import { CHART_COLORS, defaultOptions } from "@/lib/chartSetup";
 import KPICard from "./KPICard";
 import ChartCard from "./ChartCard";
 import AlertsFeed from "./AlertsFeed";
-import ChatBox from "./ChatBox";
 import AnomalyDetection from "./AnomalyDetection";
 import { useMemo } from "react";
 import {
@@ -514,8 +513,6 @@ export default function ExecutiveSummary({
             )}
           </div>
         </div>
-
-        <ChatBox />
       </div>
     </div>
   );

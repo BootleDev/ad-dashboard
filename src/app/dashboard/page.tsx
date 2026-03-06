@@ -6,6 +6,7 @@ import CreativePerformance from "@/components/CreativePerformance";
 import Diagnostics from "@/components/Diagnostics";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import type { DateRange } from "@/components/DateRangeFilter";
+import ChatBox from "@/components/ChatBox";
 import { deduplicateByDate, str, num } from "@/lib/utils";
 import type { AirtableRecord } from "@/lib/utils";
 
@@ -317,6 +318,8 @@ export default function DashboardPage() {
           </>
         )}
       </main>
+
+      <ChatBox />
     </div>
   );
 }
