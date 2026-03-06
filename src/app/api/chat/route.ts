@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAllDashboardData } from "@/lib/airtable";
+import { aggregateSnapshots } from "@/lib/utils";
 
 export async function POST(request: Request) {
   const { message } = await request.json();
@@ -19,16 +20,11 @@ export async function POST(request: Request) {
     const recentDaily = dailySorted.slice(0, 14);
     const recentAlerts = data.alerts.slice(0, 20).map((r) => r.fields);
 
-    // Merge snapshots with tags — latest snapshot per unique ad
-    const tagMap = new Map(data.tags.map((t) => [t.fields["Ad ID"], t.fields]));
-    const seenAds = new Map<string, Record<string, unknown>>();
-    for (const s of data.snapshots) {
-      const adId = String(s.fields["Ad ID"] ?? "");
-      if (!adId || seenAds.has(adId)) continue;
-      const tag = tagMap.get(s.fields["Ad ID"]) || {};
-      seenAds.set(adId, { ...s.fields, ...tag });
-    }
-    const latestAds = Array.from(seenAds.values());
+    // Aggregate snapshots per ad (sum metrics across all days)
+    const tagMap = new Map(
+      data.tags.map((t) => [String(t.fields["Ad ID"] ?? ""), t.fields]),
+    );
+    const latestAds = aggregateSnapshots(data.snapshots, tagMap);
 
     // Detect if campaigns are paused (last active spend date > 7 days ago)
     const lastSpendDate = dailySorted

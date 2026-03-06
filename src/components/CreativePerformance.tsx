@@ -6,7 +6,7 @@ import { CHART_COLORS, defaultOptions } from "@/lib/chartSetup";
 import ChartCard from "./ChartCard";
 import CreativeDNA from "./CreativeDNA";
 import ABSignificance from "./ABSignificance";
-import { num, str } from "@/lib/utils";
+import { num, str, aggregateSnapshots } from "@/lib/utils";
 import type { AirtableRecord } from "@/lib/utils";
 import { useState, useMemo } from "react";
 
@@ -35,22 +35,45 @@ export default function CreativePerformance({
     [tags],
   );
 
+  const rawAds = useMemo(
+    () => aggregateSnapshots(snapshots, tagMap),
+    [snapshots, tagMap],
+  );
+
+  // Compute data-driven Composite Score from actual performance
+  // Formula: 0.4×CTR rank + 0.3×ROAS rank + 0.2×CPC rank (inverted) + 0.1×Hook Rate rank
   const mergedAds = useMemo(() => {
-    // Sort snapshots by date desc to ensure first occurrence is the latest
-    const sortedSnaps = [...snapshots].sort((a, b) =>
-      String(b.fields["Snapshot Date"] ?? "").localeCompare(
-        String(a.fields["Snapshot Date"] ?? ""),
-      ),
-    );
-    const seen = new Map<string, Record<string, unknown>>();
-    for (const s of sortedSnaps) {
-      const adId = str(s.fields["Ad ID"]);
-      if (!adId || seen.has(adId)) continue;
-      const tag = tagMap.get(adId) || {};
-      seen.set(adId, { ...s.fields, ...tag });
+    const scoreable = rawAds.filter((a) => num(a["Spend"]) > 10);
+    if (scoreable.length === 0) return rawAds;
+
+    function percentileRank(values: number[], value: number): number {
+      const below = values.filter((v) => v < value).length;
+      return values.length > 1 ? (below / (values.length - 1)) * 9 + 1 : 5;
     }
-    return Array.from(seen.values());
-  }, [snapshots, tagMap]);
+
+    const ctrs = scoreable.map((a) => num(a["CTR"]));
+    const roass = scoreable.map((a) => num(a["ROAS"]));
+    const cpcs = scoreable.map((a) => num(a["CPC"]));
+    const hooks = scoreable.map((a) => num(a["Hook Rate"]));
+
+    const scoreMap = new Map<string, number>();
+    for (const ad of scoreable) {
+      const ctrRank = percentileRank(ctrs, num(ad["CTR"]));
+      const roasRank = percentileRank(roass, num(ad["ROAS"]));
+      // CPC inverted — lower is better
+      const cpcRank = 11 - percentileRank(cpcs, num(ad["CPC"]));
+      const hookRank = percentileRank(hooks, num(ad["Hook Rate"]));
+      const score =
+        0.4 * ctrRank + 0.3 * roasRank + 0.2 * cpcRank + 0.1 * hookRank;
+      scoreMap.set(str(ad["Ad ID"]), Math.round(score * 10) / 10);
+    }
+
+    return rawAds.map((ad) => {
+      const scored: Record<string, unknown> = { ...ad };
+      scored["Composite Score"] = scoreMap.get(str(ad["Ad ID"])) ?? 0;
+      return scored;
+    });
+  }, [rawAds]);
 
   // Sort
   const sorted = useMemo(() => {

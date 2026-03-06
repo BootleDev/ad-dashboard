@@ -5,7 +5,7 @@ import "@/lib/chartSetup";
 import { CHART_COLORS, defaultOptions } from "@/lib/chartSetup";
 import ChartCard from "./ChartCard";
 import BudgetRecommendations from "./BudgetRecommendations";
-import { num, str } from "@/lib/utils";
+import { num, str, aggregateSnapshots } from "@/lib/utils";
 import type { AirtableRecord } from "@/lib/utils";
 import { useMemo } from "react";
 
@@ -264,21 +264,15 @@ export default function Diagnostics({
     },
   };
 
-  // Merge snapshots with tags for budget recommendations — latest snapshot per unique ad
+  // Aggregate snapshots with tags for budget recommendations
   const tagMap = useMemo(
     () => new Map(tags.map((t) => [str(t.fields["Ad ID"]), t.fields])),
     [tags],
   );
-  const mergedAds = useMemo(() => {
-    const seen = new Map<string, Record<string, unknown>>();
-    for (const s of snapshots) {
-      const adId = str(s.fields["Ad ID"]);
-      if (!adId || seen.has(adId)) continue;
-      const tag = tagMap.get(adId) || {};
-      seen.set(adId, { ...s.fields, ...tag });
-    }
-    return Array.from(seen.values());
-  }, [snapshots, tagMap]);
+  const mergedAds = useMemo(
+    () => aggregateSnapshots(snapshots, tagMap),
+    [snapshots, tagMap],
+  );
 
   // Alert-based recommendations
   const recentAlerts = alerts.slice(0, 10).map((a) => a.fields);
