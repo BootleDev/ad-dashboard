@@ -4,6 +4,8 @@ import { Bar, Scatter } from "react-chartjs-2";
 import "@/lib/chartSetup";
 import { CHART_COLORS, defaultOptions } from "@/lib/chartSetup";
 import ChartCard from "./ChartCard";
+import CreativeDNA from "./CreativeDNA";
+import ABSignificance from "./ABSignificance";
 import { num, str } from "@/lib/utils";
 import type { AirtableRecord } from "@/lib/utils";
 import { useState, useMemo } from "react";
@@ -23,7 +25,7 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
   // Merge snapshots with tags (latest snapshot date)
   const tagMap = useMemo(
     () => new Map(tags.map((t) => [str(t.fields["Ad ID"]), t.fields])),
-    [tags]
+    [tags],
   );
 
   const latestDate = snapshots[0]?.fields["Snapshot Date"];
@@ -156,7 +158,11 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
     scales: {
       x: {
         ...defaultOptions.scales.x,
-        title: { display: true, text: "Hook Rate (%)", color: CHART_COLORS.muted },
+        title: {
+          display: true,
+          text: "Hook Rate (%)",
+          color: CHART_COLORS.muted,
+        },
       },
       y: {
         ...defaultOptions.scales.y,
@@ -166,17 +172,28 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
   };
 
   // Fatigue watchlist
-  const fatigued = mergedAds.filter((ad) => ad["Fatigue Flag"] === true || ad["Fatigue Flag"] === "Yes");
+  const fatigued = mergedAds.filter(
+    (ad) => ad["Fatigue Flag"] === true || ad["Fatigue Flag"] === "Yes",
+  );
 
   return (
     <div className="space-y-6">
       {/* Ad Table */}
       <div
         className="rounded-xl overflow-hidden"
-        style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+        }}
       >
-        <div className="px-5 py-3 border-b" style={{ borderColor: "var(--border)" }}>
-          <h3 className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
+        <div
+          className="px-5 py-3 border-b"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <h3
+            className="text-sm font-medium"
+            style={{ color: "var(--text-secondary)" }}
+          >
             Ad Scorecard ({sorted.length} ads)
           </h3>
         </div>
@@ -184,27 +201,36 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
           <table className="w-full text-xs">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                {([
-                  ["name", "Ad Name"],
-                  ["score", "Score"],
-                  ["roas", "ROAS"],
-                  ["spend", "Spend"],
-                  ["cpa", "CPA"],
-                  ["hookRate", "Hook Rate"],
-                ] as [SortKey, string][]).map(([key, label]) => (
+                {(
+                  [
+                    ["name", "Ad Name"],
+                    ["score", "Score"],
+                    ["roas", "ROAS"],
+                    ["spend", "Spend"],
+                    ["cpa", "CPA"],
+                    ["hookRate", "Hook Rate"],
+                  ] as [SortKey, string][]
+                ).map(([key, label]) => (
                   <th
                     key={key}
                     className="px-4 py-3 text-left cursor-pointer hover:text-white transition-colors"
                     style={{ color: "var(--text-secondary)" }}
                     onClick={() => toggleSort(key)}
                   >
-                    {label}{sortArrow(key)}
+                    {label}
+                    {sortArrow(key)}
                   </th>
                 ))}
-                <th className="px-4 py-3 text-left" style={{ color: "var(--text-secondary)" }}>
+                <th
+                  className="px-4 py-3 text-left"
+                  style={{ color: "var(--text-secondary)" }}
+                >
                   Format
                 </th>
-                <th className="px-4 py-3 text-left" style={{ color: "var(--text-secondary)" }}>
+                <th
+                  className="px-4 py-3 text-left"
+                  style={{ color: "var(--text-secondary)" }}
+                >
                   Status
                 </th>
               </tr>
@@ -213,7 +239,11 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
               {sorted.map((ad, i) => {
                 const roas = num(ad["ROAS"]);
                 const roasColor =
-                  roas >= 2.5 ? "text-green-400" : roas >= 1 ? "text-amber-400" : "text-red-400";
+                  roas >= 2.5
+                    ? "text-green-400"
+                    : roas >= 1
+                      ? "text-amber-400"
+                      : "text-red-400";
 
                 return (
                   <tr
@@ -221,12 +251,22 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
                     className="hover:bg-white/5 transition-colors"
                     style={{ borderBottom: "1px solid var(--border)" }}
                   >
-                    <td className="px-4 py-3 max-w-[200px] truncate">{str(ad["Ad Name"])}</td>
-                    <td className="px-4 py-3 font-medium">{num(ad["Composite Score"]).toFixed(1)}</td>
-                    <td className={`px-4 py-3 font-medium ${roasColor}`}>{roas.toFixed(2)}x</td>
-                    <td className="px-4 py-3">€{num(ad["Spend"]).toFixed(2)}</td>
+                    <td className="px-4 py-3 max-w-[200px] truncate">
+                      {str(ad["Ad Name"])}
+                    </td>
+                    <td className="px-4 py-3 font-medium">
+                      {num(ad["Composite Score"]).toFixed(1)}
+                    </td>
+                    <td className={`px-4 py-3 font-medium ${roasColor}`}>
+                      {roas.toFixed(2)}x
+                    </td>
+                    <td className="px-4 py-3">
+                      €{num(ad["Spend"]).toFixed(2)}
+                    </td>
                     <td className="px-4 py-3">€{num(ad["CPA"]).toFixed(2)}</td>
-                    <td className="px-4 py-3">{num(ad["Hook Rate"]).toFixed(1)}%</td>
+                    <td className="px-4 py-3">
+                      {num(ad["Hook Rate"]).toFixed(1)}%
+                    </td>
                     <td className="px-4 py-3">{str(ad["Format"]) || "—"}</td>
                     <td className="px-4 py-3">
                       <span
@@ -265,9 +305,15 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
         {/* Fatigue Watchlist */}
         <div
           className="rounded-xl p-5"
-          style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}
+          style={{
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+          }}
         >
-          <h3 className="text-sm font-medium mb-4" style={{ color: "var(--text-secondary)" }}>
+          <h3
+            className="text-sm font-medium mb-4"
+            style={{ color: "var(--text-secondary)" }}
+          >
             Fatigue Watchlist
           </h3>
           {fatigued.length === 0 ? (
@@ -281,7 +327,9 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
                   key={i}
                   className="flex justify-between items-center text-xs rounded-lg px-3 py-2 bg-amber-500/10 border border-amber-500/20"
                 >
-                  <span className="truncate mr-2 text-amber-400">{str(ad["Ad Name"])}</span>
+                  <span className="truncate mr-2 text-amber-400">
+                    {str(ad["Ad Name"])}
+                  </span>
                   <span className="text-amber-300">
                     Freq: {num(ad["Frequency"]).toFixed(1)}
                   </span>
@@ -290,6 +338,12 @@ export default function CreativePerformance({ snapshots, tags }: Props) {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Creative DNA + A/B Tests */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <CreativeDNA mergedAds={mergedAds} />
+        <ABSignificance mergedAds={mergedAds} />
       </div>
     </div>
   );

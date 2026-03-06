@@ -120,6 +120,8 @@ export default function DashboardPage() {
               <Diagnostics
                 dailyAggregates={data.dailyAggregates}
                 alerts={data.alerts}
+                snapshots={data.snapshots}
+                tags={data.tags}
               />
             )}
           </>

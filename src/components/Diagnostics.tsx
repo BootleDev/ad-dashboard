@@ -4,6 +4,7 @@ import { Bar } from "react-chartjs-2";
 import "@/lib/chartSetup";
 import { CHART_COLORS, defaultOptions } from "@/lib/chartSetup";
 import ChartCard from "./ChartCard";
+import BudgetRecommendations from "./BudgetRecommendations";
 import { num, str } from "@/lib/utils";
 import type { AirtableRecord } from "@/lib/utils";
 import { useMemo } from "react";
@@ -11,6 +12,8 @@ import { useMemo } from "react";
 interface Props {
   dailyAggregates: AirtableRecord[];
   alerts: AirtableRecord[];
+  snapshots: AirtableRecord[];
+  tags: AirtableRecord[];
 }
 
 interface DiagNode {
@@ -21,7 +24,12 @@ interface DiagNode {
   recommendation: string;
 }
 
-export default function Diagnostics({ dailyAggregates, alerts }: Props) {
+export default function Diagnostics({
+  dailyAggregates,
+  alerts,
+  snapshots,
+  tags,
+}: Props) {
   // Find last day with actual activity (spend > 0), fall back to most recent
   const latest = useMemo(() => {
     const sorted = [...dailyAggregates].sort((a, b) =>
@@ -163,6 +171,21 @@ export default function Diagnostics({ dailyAggregates, alerts }: Props) {
     },
   };
 
+  // Merge snapshots with tags for budget recommendations
+  const tagMap = useMemo(
+    () => new Map(tags.map((t) => [str(t.fields["Ad ID"]), t.fields])),
+    [tags],
+  );
+  const latestSnapDate = snapshots[0]?.fields["Snapshot Date"];
+  const mergedAds = useMemo(() => {
+    return snapshots
+      .filter((s) => s.fields["Snapshot Date"] === latestSnapDate)
+      .map((s) => {
+        const tag = tagMap.get(str(s.fields["Ad ID"])) || {};
+        return { ...s.fields, ...tag };
+      });
+  }, [snapshots, latestSnapDate, tagMap]);
+
   // Alert-based recommendations
   const recentAlerts = alerts.slice(0, 10).map((a) => a.fields);
   const alertTypes = recentAlerts.reduce<Record<string, number>>((acc, a) => {
@@ -281,6 +304,9 @@ export default function Diagnostics({ dailyAggregates, alerts }: Props) {
           <Bar data={funnelData} options={funnelOptions} />
         </ChartCard>
       </div>
+
+      {/* Budget Recommendations */}
+      <BudgetRecommendations mergedAds={mergedAds} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import KPICard from "./KPICard";
 import ChartCard from "./ChartCard";
 import AlertsFeed from "./AlertsFeed";
 import ChatBox from "./ChatBox";
+import AnomalyDetection from "./AnomalyDetection";
 import {
   num,
   str,
@@ -204,6 +205,9 @@ export default function ExecutiveSummary({
           <Line data={roasData} options={defaultOptions} />
         </ChartCard>
       </div>
+
+      {/* Anomaly Detection */}
+      <AnomalyDetection dailyAggregates={dailyAggregates} />
 
       {/* Bottom Row: Alerts + Top/Bottom + Chat */}
       <div className="grid md:grid-cols-3 gap-4">
