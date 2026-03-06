@@ -35,9 +35,18 @@ export default function ExecutiveSummary({
     String(a.fields.Date ?? "").localeCompare(String(b.fields.Date ?? "")),
   );
 
-  // Last 30 days for KPIs
-  const last30 = sorted.slice(-30);
-  const prev30 = sorted.slice(-60, -30);
+  // Use active days (spend > 0) for KPIs, not calendar days
+  const activeDays = sorted.filter((r) => num(r.fields["Total Spend"]) > 0);
+  const last30 = activeDays.slice(-30);
+  const prev30 = activeDays.slice(-60, -30);
+
+  // Date range label
+  const firstDate = str(last30[0]?.fields.Date).split("T")[0].slice(5) || "—";
+  const lastDate =
+    str(last30[last30.length - 1]?.fields.Date)
+      .split("T")[0]
+      .slice(5) || "—";
+  const periodLabel = `${firstDate} → ${lastDate} (${last30.length} active days)`;
 
   const sum = (arr: AirtableRecord[], field: string) =>
     arr.reduce((acc, r) => acc + num(r.fields[field]), 0);
@@ -175,25 +184,25 @@ export default function ExecutiveSummary({
           title="Total Spend"
           value={formatCurrency(currentSpend)}
           change={pctChange(currentSpend, prevSpend)}
-          subtitle="Last 30d"
+          subtitle={periodLabel}
         />
         <KPICard
           title="ROAS"
           value={`${currentROAS.toFixed(2)}x`}
           change={pctChange(currentROAS, prevROAS)}
-          subtitle="Last 30d"
+          subtitle={periodLabel}
         />
         <KPICard
           title="CPA"
           value={formatCurrency(currentCPA)}
           change={pctChange(currentCPA, prevCPA)}
-          subtitle="Last 30d"
+          subtitle={periodLabel}
         />
         <KPICard
           title="Purchases"
           value={formatNumber(currentPurchases)}
           change={pctChange(currentPurchases, prevPurchases)}
-          subtitle="Last 30d"
+          subtitle={periodLabel}
         />
         <KPICard
           title="CPM"
