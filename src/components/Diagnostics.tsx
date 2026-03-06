@@ -26,6 +26,7 @@ interface DiagNode {
   status: "good" | "warning" | "bad";
   value: string;
   recommendation: string;
+  tooltip: string;
 }
 
 export default function Diagnostics({
@@ -118,6 +119,8 @@ export default function Diagnostics({
       {
         label: "CPM",
         metric: "Cost per 1,000 views",
+        tooltip:
+          "Cost per 1,000 impressions. UK/EU benchmark: <€14 good, €14–22 normal, >€22 high",
         status: cpm < 14 ? "good" : cpm < 22 ? "warning" : "bad",
         value: `€${cpm.toFixed(2)}`,
         recommendation:
@@ -130,6 +133,8 @@ export default function Diagnostics({
       {
         label: "CTR",
         metric: "Click-through rate (all clicks)",
+        tooltip:
+          "Click-through rate. Benchmark: >3.5% good, 2–3.5% moderate, <2% low",
         status: ctr >= 3.5 ? "good" : ctr >= 2.0 ? "warning" : "bad",
         value: `${ctr.toFixed(2)}%`,
         recommendation:
@@ -142,6 +147,8 @@ export default function Diagnostics({
       {
         label: "CPC",
         metric: "Cost per click",
+        tooltip:
+          "Cost per click. Benchmark: <€0.50 good, €0.50–1.00 moderate, >€1.00 high",
         status: cpc < 0.5 ? "good" : cpc < 1.0 ? "warning" : "bad",
         value: `€${cpc.toFixed(2)}`,
         recommendation:
@@ -157,6 +164,8 @@ export default function Diagnostics({
             ? "True ROAS (Shopify)"
             : "ROAS",
         metric: "Return on ad spend",
+        tooltip:
+          "Return on ad spend. Target: 2.5x+ profitable, 1.5–2.5x positive, <1.5x below break-even",
         status: trueRoas >= 2.5 ? "good" : trueRoas >= 1.5 ? "warning" : "bad",
         value: `${trueRoas.toFixed(2)}x`,
         recommendation:
@@ -172,6 +181,8 @@ export default function Diagnostics({
             ? "True Cost/Order (Shopify)"
             : "Cost per Order",
         metric: "Cost per acquisition",
+        tooltip:
+          "Cost per order. Target: <€30 profitable, €30–55 moderate, >€55 exceeds product value",
         status:
           trueCpa === 0
             ? "warning"
@@ -309,7 +320,9 @@ export default function Diagnostics({
                   />
                   <span className="text-sm font-medium">{node.label}</span>
                 </div>
-                <div className="text-lg font-bold">{node.value}</div>
+                <div className="text-lg font-bold" title={node.tooltip}>
+                  {node.value}
+                </div>
                 <div
                   className="text-[10px] mt-1"
                   style={{ color: "var(--text-secondary)" }}
@@ -387,7 +400,10 @@ export default function Diagnostics({
           )}
         </div>
 
-        <ChartCard title="Funnel (All Active Days)">
+        <ChartCard
+          title="Funnel (All Active Days)"
+          tooltip="Conversion funnel from impressions → clicks → purchases. Log scale. Purple bar = Shopify orders when enabled."
+        >
           <Bar data={funnelData} options={funnelOptions} />
         </ChartCard>
       </div>

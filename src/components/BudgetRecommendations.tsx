@@ -162,6 +162,15 @@ export default function BudgetRecommendations({
     pause: "Pause",
   };
 
+  const actionTooltip = {
+    increase:
+      "High Composite Score (6+), CTR 20%+ above average, and confirmed conversions",
+    decrease:
+      "Low Composite Score (3 or below), high CPC, or frequency above 1.8",
+    pause:
+      "€50+ spend with zero conversions, or CPA 2x above average with ROAS below 1.0",
+  };
+
   return (
     <div
       className="rounded-xl p-5"
@@ -222,6 +231,7 @@ export default function BudgetRecommendations({
                   <span className="font-bold">{rec.suggestedChange}</span>
                   <span
                     className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${actionStyle[rec.action]}`}
+                    title={actionTooltip[rec.action]}
                   >
                     {actionLabel[rec.action]}
                   </span>

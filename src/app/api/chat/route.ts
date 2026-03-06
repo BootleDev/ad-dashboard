@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getAllDashboardData } from "@/lib/airtable";
-import { aggregateSnapshots, deduplicateByDate } from "@/lib/utils";
+import {
+  aggregateSnapshots,
+  deduplicateByDate,
+  attributeShopifyToCampaigns,
+} from "@/lib/utils";
 
 export async function POST(request: Request) {
   const cookieStore = await cookies();
@@ -78,9 +82,19 @@ export async function POST(request: Request) {
         ? `\nIMPORTANT: Meta pixel was broken during the campaign period. Shopify data shows TRUE sales. Always prefer Shopify data for revenue/orders/ROAS/CPA questions.\nShopify data is filtered to campaign-active dates only (${activeDates.size} days with ad spend).\n\nSHOPIFY DAILY SALES (campaign days):\n${JSON.stringify(campaignShopify, null, 2)}\n`
         : "\nNOTE: No Shopify sales data available yet.\n";
 
+    // Campaign-level Shopify attribution
+    const campaignBreakdown = attributeShopifyToCampaigns(
+      data.shopifySales,
+      data.snapshots,
+    );
+    const campaignNote =
+      campaignBreakdown.length > 0
+        ? `\nCAMPAIGN-LEVEL SHOPIFY ATTRIBUTION (orders attributed by matching campaign dates, overlap days split by spend):\n${JSON.stringify(campaignBreakdown, null, 2)}\n`
+        : "";
+
     const context = `You are an expert paid media analyst for Bootle, a Swedish modular drinkware brand.
 You have access to the latest ad performance data.
-${pauseNote}${shopifyNote}
+${pauseNote}${shopifyNote}${campaignNote}
 DAILY AGGREGATES (last 14 days):
 ${JSON.stringify(recentDaily, null, 2)}
 

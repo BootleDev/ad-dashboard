@@ -16,7 +16,7 @@ import {
   formatNumber,
   pctChange,
 } from "@/lib/utils";
-import type { AirtableRecord } from "@/lib/utils";
+import type { AirtableRecord, CampaignShopifyData } from "@/lib/utils";
 import type { DateRange } from "./DateRangeFilter";
 
 interface Props {
@@ -28,6 +28,7 @@ interface Props {
   lastActiveDate: string | null;
   shopifySales: AirtableRecord[];
   showShopify: boolean;
+  campaignBreakdown?: CampaignShopifyData[];
 }
 
 export default function ExecutiveSummary({
@@ -39,6 +40,7 @@ export default function ExecutiveSummary({
   lastActiveDate,
   shopifySales,
   showShopify,
+  campaignBreakdown = [],
 }: Props) {
   // Sort daily by date ascending for charts
   const sorted = useMemo(
@@ -426,12 +428,175 @@ export default function ExecutiveSummary({
         </div>
       )}
 
+      {/* Campaign Breakdown */}
+      {showShopify && campaignBreakdown.length > 0 && (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          <div
+            className="px-5 py-3 border-b"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <h3
+              className="text-sm font-medium"
+              style={{ color: "var(--text-secondary)" }}
+              title="Shopify orders attributed to campaigns by matching active spend dates. Overlap days split proportionally by spend."
+            >
+              Campaign Breakdown (Shopify-Attributed)
+            </h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                  <th
+                    className="px-4 py-3 text-left"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Campaign
+                  </th>
+                  <th
+                    className="px-4 py-3 text-left"
+                    style={{ color: "var(--text-secondary)" }}
+                  >
+                    Dates
+                  </th>
+                  <th
+                    className="px-4 py-3 text-right"
+                    style={{ color: "var(--text-secondary)" }}
+                    title="Total Meta ad spend for this campaign"
+                  >
+                    Spend
+                  </th>
+                  <th
+                    className="px-4 py-3 text-right"
+                    style={{ color: "var(--text-secondary)" }}
+                    title="Shopify gross revenue on campaign-active days (proportional for overlap days)"
+                  >
+                    Revenue
+                  </th>
+                  <th
+                    className="px-4 py-3 text-right"
+                    style={{ color: "var(--text-secondary)" }}
+                    title="Shopify Revenue / Meta Spend"
+                  >
+                    True ROAS
+                  </th>
+                  <th
+                    className="px-4 py-3 text-right"
+                    style={{ color: "var(--text-secondary)" }}
+                    title="Meta Spend / Shopify Orders"
+                  >
+                    True CPA
+                  </th>
+                  <th
+                    className="px-4 py-3 text-right"
+                    style={{ color: "var(--text-secondary)" }}
+                    title="Shopify orders on campaign-active days (proportional for overlap days)"
+                  >
+                    Orders
+                  </th>
+                  <th
+                    className="px-4 py-3 text-right"
+                    style={{ color: "var(--text-secondary)" }}
+                    title="Total ad impressions for this campaign"
+                  >
+                    Impr.
+                  </th>
+                  <th
+                    className="px-4 py-3 text-right"
+                    style={{ color: "var(--text-secondary)" }}
+                    title="Click-through rate = Clicks / Impressions"
+                  >
+                    CTR
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaignBreakdown.map((c, i) => (
+                  <tr
+                    key={i}
+                    className="hover:bg-white/5 transition-colors"
+                    style={{ borderBottom: "1px solid var(--border)" }}
+                  >
+                    <td className="px-4 py-3 font-medium max-w-[200px] truncate">
+                      {c.campaignName}
+                    </td>
+                    <td
+                      className="px-4 py-3 whitespace-nowrap"
+                      style={{ color: "var(--text-secondary)" }}
+                    >
+                      {c.dateRange}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {formatCurrency(c.metaSpend)}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-right"
+                      style={{ color: "#a855f7" }}
+                    >
+                      {formatCurrency(c.shopifyRevenue)}
+                    </td>
+                    <td
+                      className={`px-4 py-3 text-right font-medium ${
+                        c.trueROAS >= 2.5
+                          ? "text-green-400"
+                          : c.trueROAS >= 1.5
+                            ? "text-amber-400"
+                            : "text-red-400"
+                      }`}
+                    >
+                      {c.trueROAS.toFixed(2)}x
+                    </td>
+                    <td
+                      className={`px-4 py-3 text-right ${
+                        c.trueCPA > 0 && c.trueCPA < 30
+                          ? "text-green-400"
+                          : c.trueCPA >= 55
+                            ? "text-red-400"
+                            : ""
+                      }`}
+                    >
+                      {c.shopifyOrders > 0 ? formatCurrency(c.trueCPA) : "—"}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-right"
+                      style={{ color: "#a855f7" }}
+                    >
+                      {c.shopifyOrders % 1 === 0
+                        ? c.shopifyOrders
+                        : c.shopifyOrders.toFixed(1)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {formatNumber(c.impressions)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {formatPercent(c.ctr)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Charts Row */}
       <div className="grid md:grid-cols-2 gap-4">
-        <ChartCard title={`Spend vs Revenue (${dateRange.label})`}>
+        <ChartCard
+          title={`Spend vs Revenue (${dateRange.label})`}
+          tooltip="Daily ad spend (red) vs revenue (green = Meta pixel, purple = Shopify). Revenue axis on right."
+        >
           <Line data={spendRevenueData} options={spendRevenueOptions} />
         </ChartCard>
-        <ChartCard title={`ROAS Trend (${dateRange.label})`}>
+        <ChartCard
+          title={`ROAS Trend (${dateRange.label})`}
+          tooltip="Daily ROAS (revenue/spend). Dashed line = 2.5x target. Above target = profitable scaling zone."
+        >
           <Line data={roasData} options={defaultOptions} />
         </ChartCard>
       </div>

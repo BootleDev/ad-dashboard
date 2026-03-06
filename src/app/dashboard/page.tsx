@@ -7,8 +7,13 @@ import Diagnostics from "@/components/Diagnostics";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import type { DateRange } from "@/components/DateRangeFilter";
 import ChatBox from "@/components/ChatBox";
-import { deduplicateByDate, str, num } from "@/lib/utils";
-import type { AirtableRecord } from "@/lib/utils";
+import {
+  deduplicateByDate,
+  str,
+  num,
+  attributeShopifyToCampaigns,
+} from "@/lib/utils";
+import type { AirtableRecord, CampaignShopifyData } from "@/lib/utils";
 
 type Tab = "executive" | "creative" | "diagnostics";
 
@@ -103,6 +108,15 @@ export default function DashboardPage() {
       return d && activeDates.has(d);
     });
   }, [filteredDaily, filteredShopify]);
+
+  // Campaign-level Shopify attribution
+  const campaignBreakdown: CampaignShopifyData[] = useMemo(
+    () =>
+      data
+        ? attributeShopifyToCampaigns(filteredShopify, filteredSnapshots)
+        : [],
+    [data, filteredShopify, filteredSnapshots],
+  );
 
   // Campaign paused detection: find last date with spend > 0
   const lastActiveDate = useMemo(() => {
@@ -308,6 +322,7 @@ export default function DashboardPage() {
                 lastActiveDate={lastActiveDate}
                 shopifySales={campaignScopedShopify}
                 showShopify={showShopify}
+                campaignBreakdown={campaignBreakdown}
               />
             )}
             {tab === "creative" && (

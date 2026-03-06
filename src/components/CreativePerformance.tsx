@@ -273,19 +273,40 @@ export default function CreativePerformance({
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
                 {(
                   [
-                    ["name", "Ad Name"],
-                    ["score", "Score"],
-                    ["roas", zeroCpaRatio > 0.8 ? "ROAS *" : "ROAS"],
-                    ["spend", "Spend"],
-                    ["cpa", zeroCpaRatio > 0.8 ? "CPA *" : "CPA"],
-                    ["hookRate", "Hook Rate"],
-                  ] as [SortKey, string][]
-                ).map(([key, label]) => (
+                    ["name", "Ad Name", "Individual ad creative name"],
+                    [
+                      "score",
+                      "Score",
+                      "Composite score: 40% CTR + 30% ROAS + 20% CPC (inverted) + 10% Hook Rate. Ads with <€10 spend score 0.",
+                    ],
+                    [
+                      "roas",
+                      zeroCpaRatio > 0.8 ? "ROAS *" : "ROAS",
+                      "Return on ad spend = Revenue / Spend (Meta pixel data)",
+                    ],
+                    [
+                      "spend",
+                      "Spend",
+                      "Total Meta ad spend for this ad across all active days",
+                    ],
+                    [
+                      "cpa",
+                      zeroCpaRatio > 0.8 ? "CPA *" : "CPA",
+                      "Cost per acquisition = Spend / Purchases (Meta pixel data)",
+                    ],
+                    [
+                      "hookRate",
+                      "Hook Rate",
+                      "% of 3-second video views / Impressions. Measures how well the first 3 seconds grab attention.",
+                    ],
+                  ] as [SortKey, string, string][]
+                ).map(([key, label, tip]) => (
                   <th
                     key={key}
                     className="px-4 py-3 text-left cursor-pointer hover:text-white transition-colors"
                     style={{ color: "var(--text-secondary)" }}
                     onClick={() => toggleSort(key)}
+                    title={tip}
                   >
                     {label}
                     {sortArrow(key)}
@@ -294,12 +315,14 @@ export default function CreativePerformance({
                 <th
                   className="px-4 py-3 text-left"
                   style={{ color: "var(--text-secondary)" }}
+                  title="Creative format tag (UGC, Product Showcase, Founder-Led, etc.)"
                 >
                   Format
                 </th>
                 <th
                   className="px-4 py-3 text-left"
                   style={{ color: "var(--text-secondary)" }}
+                  title="Current ad delivery status within Meta"
                 >
                   Status
                 </th>

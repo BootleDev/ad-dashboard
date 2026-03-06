@@ -1,3 +1,169 @@
+export interface CampaignDateInfo {
+  campaigns: Array<{ name: string; spend: number; fraction: number }>;
+}
+
+export interface CampaignShopifyData {
+  campaignName: string;
+  dateRange: string;
+  metaSpend: number;
+  shopifyRevenue: number;
+  shopifyOrders: number;
+  trueROAS: number;
+  trueCPA: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+}
+
+/**
+ * Build a map of date → which campaigns were active (spend > 0) with spend fractions.
+ * For days with multiple campaigns, fractions are proportional to spend.
+ */
+export function buildCampaignDateMap(
+  snapshots: AirtableRecord[],
+): Map<string, CampaignDateInfo> {
+  // Group spend by date + campaign
+  const dateSpend = new Map<string, Map<string, number>>();
+  for (const s of snapshots) {
+    const spend = num(s.fields["Spend"]);
+    if (spend <= 0) continue;
+    const date = str(s.fields["Snapshot Date"]).split("T")[0];
+    const campaign = str(s.fields["Campaign Name"]);
+    if (!date || !campaign) continue;
+    if (!dateSpend.has(date)) dateSpend.set(date, new Map());
+    const campaignMap = dateSpend.get(date)!;
+    campaignMap.set(campaign, (campaignMap.get(campaign) ?? 0) + spend);
+  }
+
+  const result = new Map<string, CampaignDateInfo>();
+  for (const [date, campaignMap] of dateSpend) {
+    const totalDaySpend = Array.from(campaignMap.values()).reduce(
+      (a, b) => a + b,
+      0,
+    );
+    const campaigns = Array.from(campaignMap.entries()).map(
+      ([name, spend]) => ({
+        name,
+        spend,
+        fraction: totalDaySpend > 0 ? spend / totalDaySpend : 0,
+      }),
+    );
+    result.set(date, { campaigns });
+  }
+  return result;
+}
+
+/**
+ * Attribute Shopify orders/revenue to campaigns by matching dates.
+ * For overlap days, attribution is proportional to campaign spend.
+ */
+export function attributeShopifyToCampaigns(
+  shopifySales: AirtableRecord[],
+  snapshots: AirtableRecord[],
+): CampaignShopifyData[] {
+  const dateMap = buildCampaignDateMap(snapshots);
+
+  // Aggregate per-campaign: spend, attributed Shopify revenue/orders, impressions, clicks
+  const campaignAgg = new Map<
+    string,
+    {
+      dates: Set<string>;
+      metaSpend: number;
+      shopifyRevenue: number;
+      shopifyOrders: number;
+      impressions: number;
+      clicks: number;
+    }
+  >();
+
+  // Sum Meta metrics per campaign from snapshots
+  for (const s of snapshots) {
+    const spend = num(s.fields["Spend"]);
+    if (spend <= 0) continue;
+    const campaign = str(s.fields["Campaign Name"]);
+    const date = str(s.fields["Snapshot Date"]).split("T")[0];
+    if (!campaign || !date) continue;
+    if (!campaignAgg.has(campaign)) {
+      campaignAgg.set(campaign, {
+        dates: new Set(),
+        metaSpend: 0,
+        shopifyRevenue: 0,
+        shopifyOrders: 0,
+        impressions: 0,
+        clicks: 0,
+      });
+    }
+    const agg = campaignAgg.get(campaign)!;
+    agg.dates.add(date);
+    agg.metaSpend += spend;
+    agg.impressions += num(s.fields["Impressions"]);
+    agg.clicks += num(s.fields["Clicks"]);
+  }
+
+  // Attribute Shopify data using date map fractions
+  for (const r of shopifySales) {
+    const date = str(r.fields["Date"]).split("T")[0];
+    if (!date) continue;
+    const info = dateMap.get(date);
+    if (!info) continue;
+    const revenue = num(r.fields["Gross Revenue"]);
+    const orders = num(r.fields["Total Orders"]);
+    for (const c of info.campaigns) {
+      const agg = campaignAgg.get(c.name);
+      if (!agg) continue;
+      agg.shopifyRevenue += revenue * c.fraction;
+      agg.shopifyOrders += orders * c.fraction;
+    }
+  }
+
+  // Build results sorted by earliest date (most recent first)
+  return Array.from(campaignAgg.entries())
+    .map(([name, agg]) => {
+      const sortedDates = Array.from(agg.dates).sort();
+      const first = sortedDates[0] ?? "";
+      const last = sortedDates[sortedDates.length - 1] ?? "";
+      const fmtDate = (d: string) => {
+        if (!d) return "";
+        const [, m, day] = d.split("-");
+        const months = [
+          "",
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ];
+        return `${months[parseInt(m, 10)]} ${parseInt(day, 10)}`;
+      };
+      const dateRange =
+        first === last
+          ? fmtDate(first)
+          : `${fmtDate(first)} – ${fmtDate(last)}`;
+      return {
+        campaignName: name,
+        dateRange,
+        metaSpend: agg.metaSpend,
+        shopifyRevenue: agg.shopifyRevenue,
+        shopifyOrders: agg.shopifyOrders,
+        trueROAS: agg.metaSpend > 0 ? agg.shopifyRevenue / agg.metaSpend : 0,
+        trueCPA: agg.shopifyOrders > 0 ? agg.metaSpend / agg.shopifyOrders : 0,
+        impressions: agg.impressions,
+        clicks: agg.clicks,
+        ctr: agg.impressions > 0 ? (agg.clicks / agg.impressions) * 100 : 0,
+        _firstDate: first,
+      };
+    })
+    .sort((a, b) => b._firstDate.localeCompare(a._firstDate))
+    .map(({ _firstDate, ...rest }) => rest);
+}
+
 export function formatCurrency(value: number, decimals = 2): string {
   return `€${value.toFixed(decimals)}`;
 }
