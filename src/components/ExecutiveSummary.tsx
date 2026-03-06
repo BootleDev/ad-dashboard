@@ -418,6 +418,7 @@ export default function ExecutiveSummary({
           </span>
           <span style={{ color: "var(--text-secondary)" }}>
             {shopifyOrders} Shopify orders vs {totalPurchases} Meta-tracked
+            (campaign days only)
             {shopifyOrders >= totalPurchases
               ? ` — pixel missed ${shopifyOrders - totalPurchases} orders`
               : ` — Meta over-attributed by ${totalPurchases - shopifyOrders} orders`}

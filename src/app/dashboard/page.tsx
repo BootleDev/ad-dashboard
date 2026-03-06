@@ -89,6 +89,21 @@ export default function DashboardPage() {
     [data, dateRange],
   );
 
+  // Scope Shopify data to only dates where Meta had active spend (campaigns running)
+  // This excludes organic orders from non-campaign periods so True ROAS is accurate
+  const campaignScopedShopify = useMemo(() => {
+    const activeDates = new Set(
+      filteredDaily
+        .filter((r) => num(r.fields["Total Spend"]) > 0)
+        .map((r) => str(r.fields.Date).split("T")[0])
+        .filter(Boolean),
+    );
+    return filteredShopify.filter((r) => {
+      const d = str(r.fields.Date).split("T")[0];
+      return d && activeDates.has(d);
+    });
+  }, [filteredDaily, filteredShopify]);
+
   // Campaign paused detection: find last date with spend > 0
   const lastActiveDate = useMemo(() => {
     const withSpend = dedupedDaily
@@ -291,7 +306,7 @@ export default function DashboardPage() {
                 dateRange={dateRange}
                 campaignsPaused={campaignsPaused}
                 lastActiveDate={lastActiveDate}
-                shopifySales={filteredShopify}
+                shopifySales={campaignScopedShopify}
                 showShopify={showShopify}
               />
             )}
@@ -311,7 +326,7 @@ export default function DashboardPage() {
                 tags={data.tags}
                 campaignsPaused={campaignsPaused}
                 lastActiveDate={lastActiveDate}
-                shopifySales={filteredShopify}
+                shopifySales={campaignScopedShopify}
                 showShopify={showShopify}
               />
             )}
