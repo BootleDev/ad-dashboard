@@ -57,7 +57,7 @@ export default function ChatBox() {
       {/* Floating trigger button */}
       <button
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full text-sm font-medium shadow-lg transition-all hover:scale-105"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full text-sm font-medium shadow-lg transition-all hover:scale-105 cursor-pointer"
         style={{
           background: open ? "var(--bg-secondary)" : "var(--accent-blue)",
           color: open ? "var(--text-secondary)" : "#fff",
@@ -119,7 +119,7 @@ export default function ChatBox() {
             {messages.length > 0 && (
               <button
                 onClick={() => setMessages([])}
-                className="text-[10px] px-2 py-1 rounded transition-colors hover:bg-white/10"
+                className="text-[10px] px-2 py-1 rounded transition-colors hover:bg-white/10 cursor-pointer"
                 style={{ color: "var(--text-secondary)" }}
               >
                 Clear
@@ -147,7 +147,7 @@ export default function ChatBox() {
                     onClick={() => {
                       setInput(q);
                     }}
-                    className="block w-full text-left text-xs px-3 py-2 rounded-lg transition-colors hover:bg-white/5"
+                    className="block w-full text-left text-xs px-3 py-2 rounded-lg transition-colors hover:bg-white/5 cursor-pointer"
                     style={{
                       background: "var(--bg-secondary)",
                       color: "var(--text-primary)",
@@ -208,7 +208,7 @@ export default function ChatBox() {
             <button
               onClick={handleSend}
               disabled={loading}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50"
+              className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               style={{ background: "var(--accent-blue)", color: "#fff" }}
             >
               Send

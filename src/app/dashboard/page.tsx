@@ -210,7 +210,7 @@ export default function DashboardPage() {
             {!loading && data && (
               <button
                 onClick={fetchData}
-                className="text-[10px] px-1.5 py-0.5 rounded transition-colors hover:bg-white/10"
+                className="text-[10px] px-1.5 py-0.5 rounded transition-colors hover:bg-white/10 cursor-pointer"
                 style={{ color: "var(--text-secondary)" }}
                 title="Refresh data"
               >
@@ -229,7 +229,7 @@ export default function DashboardPage() {
           {hasShopifyData && (
             <button
               onClick={() => setShowShopify((v) => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-medium transition-all cursor-pointer"
               style={{
                 background: showShopify
                   ? "rgba(168, 85, 247, 0.15)"
@@ -260,7 +260,7 @@ export default function DashboardPage() {
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`px-4 py-2 rounded-md text-xs font-medium transition-all ${
+                className={`px-4 py-2 rounded-md text-xs font-medium transition-all cursor-pointer ${
                   tab === t.key ? "text-white" : ""
                 }`}
                 style={{
