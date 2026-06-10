@@ -1,7 +1,16 @@
 /**
  * Pure unit tests for the Supabase row -> Airtable-envelope mappers
  * (WEBDEV-194). NO live DB: these exercise the pure mappers extracted out of
- * supabase.ts so the shape-critical contract is locked in CI.
+ * supabase.ts so the shape-critical contract is locked by `npm test`.
+ *
+ * SCOPE — what this suite does and does NOT cover: it locks the MAPPER to
+ * verbatim passthrough — a mapper that starts scaling or normalizing rate
+ * values fails `npm test`. That run is MANUAL: this repo has NO CI yet (zero
+ * GitHub workflows; the Vercel build is a plain `next build`), so nothing
+ * executes the suite automatically. Upstream ETL drift — the writer starting
+ * to store percents instead of fractions — sails through these fixture-based
+ * specs and is covered only by the manual scripts/parity-webdev194.mjs run
+ * against live data.
  *
  * The #1 review risk is the unit scale of the rate columns (this repoint's
  * analog of the social-dashboard ER 100x bug). Empirically verified on
@@ -13,8 +22,6 @@
  *     (4.05 instead of 0.0405) would silently render 405%.
  *   - ROAS / Frequency are MULTIPLES (3.17x, 1.28) — legitimately > 1; the
  *     fraction guard must NOT be applied to them.
- * If a future ETL ever writes percents instead of fractions, these tests turn
- * that into a red build instead of a silently-wrong dashboard.
  *
  * Fixture values are REAL values read from BOTH stores for snapshot_id
  * "120237211556740289-2026-01-22" (Airtable recoOL0GU7UbYjn6H), so the
@@ -127,9 +134,12 @@ describe("mapSnapshotRow — rate-column unit scale", () => {
   });
 
   it("REGRESSION GUARD: a percent-shaped CTR (4.054 instead of 0.04054) VIOLATES the fraction invariant", () => {
-    // Simulate a future ETL bug writing percents. The mapper passes it through
-    // verbatim, so the fraction (<1) property FAILS — which is exactly what
-    // makes CI go red instead of CreativeDNA rendering num(ctr)*100 = 405%.
+    // Simulate percent-shaped input. The mapper passes it through verbatim,
+    // so the fraction (<1) property FAILS — proving the invariant DETECTS a
+    // percent (a mapper that silently rescaled would mask it, and the
+    // verbatim-passthrough specs above would go red under a manual `npm test`
+    // — there is NO CI in this repo yet). Live ETL drift itself is caught
+    // only by scripts/parity-webdev194.mjs, not by this fixture.
     const rec = mapSnapshotRow(snapshotRow({ ctr: "4.054054" }));
     const ctr = rec.fields["CTR"];
 

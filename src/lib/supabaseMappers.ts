@@ -31,8 +31,13 @@
  *   - ROAS / Frequency are MULTIPLES (e.g. roas 3.17x, frequency 1.28) — they
  *     legitimately exceed 1 and must NOT be given a <1 fraction guard.
  * The mappers pass values through VERBATIM (pg numeric arrives as a string;
- * num() in the components parses it identically). The fraction-vs-percent
- * invariant is locked by supabaseMappers.test.ts.
+ * num() in the components parses it identically). supabaseMappers.test.ts
+ * locks the MAPPERS to that verbatim passthrough — a mapper that starts
+ * scaling or normalizing rate values fails `npm test` (run manually; this
+ * repo has NO CI yet, so nothing runs the suite automatically). Upstream ETL
+ * drift (the writer starting to store percents instead of fractions) is NOT
+ * caught by those fixture tests — only the manual
+ * scripts/parity-webdev194.mjs covers that.
  *
  * CRITICAL cross-source join: src/lib/utils.ts merges Creative Tags (which
  * stay on Airtable) into snapshots keyed by the "Ad ID" display field. The

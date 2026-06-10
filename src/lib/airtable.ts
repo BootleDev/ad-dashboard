@@ -5,6 +5,7 @@ import {
   getAlertsFromSupabase,
   getShopifySalesFromSupabase,
 } from "./supabase";
+import { forcedToAirtable } from "./sourceSwitch";
 
 const BASE_URL = "https://api.airtable.com/v0";
 const BASE_ID = process.env.AIRTABLE_BASE_ID!;
@@ -98,9 +99,8 @@ async function fetchAllRecords(
 // auth — acceptable.
 // ---------------------------------------------------------------------------
 
-function forcedToAirtable(envVar: string | undefined): boolean {
-  return envVar?.toLowerCase() === "airtable";
-}
+// forcedToAirtable lives in ./sourceSwitch (pure, unit-tested): whitespace-
+// and case-insensitive "airtable" match, warns on any other non-empty value.
 
 async function getAdSnapshotsFromAirtable() {
   return fetchAllRecords(TABLES.AD_SNAPSHOTS, {
@@ -110,7 +110,7 @@ async function getAdSnapshotsFromAirtable() {
 
 export async function getAdSnapshots() {
   if (
-    !forcedToAirtable(process.env.AD_SNAPSHOTS_SOURCE) &&
+    !forcedToAirtable(process.env.AD_SNAPSHOTS_SOURCE, "AD_SNAPSHOTS_SOURCE") &&
     hasSupabaseDbUrl()
   ) {
     try {
@@ -143,7 +143,10 @@ async function getDailyAggregatesFromAirtable() {
 
 export async function getDailyAggregates() {
   if (
-    !forcedToAirtable(process.env.DAILY_AGGREGATES_SOURCE) &&
+    !forcedToAirtable(
+      process.env.DAILY_AGGREGATES_SOURCE,
+      "DAILY_AGGREGATES_SOURCE",
+    ) &&
     hasSupabaseDbUrl()
   ) {
     try {
@@ -172,7 +175,10 @@ async function getAlertsFromAirtable() {
 // paused), so this getter fails over on-empty to Airtable (also empty) —
 // harmless and by design. The mapper is still fully unit-tested from fixtures.
 export async function getAlerts() {
-  if (!forcedToAirtable(process.env.AD_ALERTS_SOURCE) && hasSupabaseDbUrl()) {
+  if (
+    !forcedToAirtable(process.env.AD_ALERTS_SOURCE, "AD_ALERTS_SOURCE") &&
+    hasSupabaseDbUrl()
+  ) {
     try {
       const rows = await getAlertsFromSupabase();
       if (rows.length > 0) return rows;
@@ -197,7 +203,7 @@ async function getShopifySalesFromAirtable() {
 
 export async function getShopifySales() {
   if (
-    !forcedToAirtable(process.env.SHOPIFY_SALES_SOURCE) &&
+    !forcedToAirtable(process.env.SHOPIFY_SALES_SOURCE, "SHOPIFY_SALES_SOURCE") &&
     hasSupabaseDbUrl()
   ) {
     try {

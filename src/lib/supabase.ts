@@ -127,9 +127,12 @@ function getPool(): pg.Pool {
       ssl: { ca: SUPABASE_ROOT_CA_2021, rejectUnauthorized: true },
       max: 2,
       // Time-bound a slow/hung pooler so a stall fails over to Airtable fast.
-      // These sit UNDER the SUPABASE_READ_TIMEOUT_MS (4000) Promise.race ceiling
-      // so the pg-level timeouts fire first and an orphaned query can't outlive
-      // the failover: connect <= 2500, query/statement <= 3500 < 4000.
+      // NOTE: the connect (2500) and query (3500) budgets are SEQUENTIAL, so
+      // they do NOT individually sit under the 4000ms ceiling. The actual
+      // guarantee: failover is guaranteed at 4000ms by the Promise.race in
+      // withTimeout(); an orphaned in-flight query is then destroyed by
+      // query_timeout, bounded at ~6s worst case (2500 connect + 3500 query),
+      // briefly holding one of the pool's 2 slots after the failover.
       connectionTimeoutMillis: 2500,
       query_timeout: 3500,
       statement_timeout: 3500,
@@ -181,9 +184,14 @@ async function withTimeout<T>(label: string, read: Promise<T>): Promise<T> {
 // in ./supabaseMappers so they can be unit-tested without this server-only / pg
 // connection layer. The #1 review risk — the CTR/CVR/Hook-Rate/Hold-Rate
 // fraction-vs-percent invariant and the exact emitted key set / id synthesis /
-// sparse-shape rule / "Ad ID" tag-join identity — is locked there by
-// supabaseMappers.test.ts. Each getter below just runs the query and maps each
-// row through the matching pure mapper.
+// sparse-shape rule / "Ad ID" tag-join identity — is pinned there by
+// supabaseMappers.test.ts, which locks the MAPPERS to verbatim passthrough: a
+// mapper that starts scaling or normalizing fails `npm test` (run manually —
+// this repo has NO CI yet, so nothing runs the suite automatically). Upstream
+// ETL drift (the writer starting to store percents) is NOT caught by those
+// fixture tests; only the manual scripts/parity-webdev194.mjs covers that.
+// Each getter below just runs the query and maps each row through the matching
+// pure mapper.
 
 // ---------------------------------------------------------------------------
 // marketing.ad_snapshots -> getAdSnapshots
