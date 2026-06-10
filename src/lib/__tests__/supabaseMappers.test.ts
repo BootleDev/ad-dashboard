@@ -5,12 +5,13 @@
  *
  * SCOPE — what this suite does and does NOT cover: it locks the MAPPER to
  * verbatim passthrough — a mapper that starts scaling or normalizing rate
- * values fails `npm test`. That run is MANUAL: this repo has NO CI yet (zero
- * GitHub workflows; the Vercel build is a plain `next build`), so nothing
- * executes the suite automatically. Upstream ETL drift — the writer starting
- * to store percents instead of fractions — sails through these fixture-based
- * specs and is covered only by the manual scripts/parity-webdev194.mjs run
- * against live data.
+ * values fails `npm test`, which since WEBDEV-210 runs on every PR/push
+ * (.github/workflows/ci.yml) and gates every Vercel deploy (vercel.json
+ * buildCommand). Upstream ETL drift — the writer starting to store percents
+ * instead of fractions — sails through these fixture-based specs; it is
+ * covered at runtime by the assertFractionScale sentinel (../rateSentinel)
+ * and cross-checked daily by the scheduled parity run
+ * (.github/workflows/parity.yml -> scripts/parity-webdev194.mjs).
  *
  * The #1 review risk is the unit scale of the rate columns (this repoint's
  * analog of the social-dashboard ER 100x bug). Empirically verified on
@@ -137,9 +138,10 @@ describe("mapSnapshotRow — rate-column unit scale", () => {
     // Simulate percent-shaped input. The mapper passes it through verbatim,
     // so the fraction (<1) property FAILS — proving the invariant DETECTS a
     // percent (a mapper that silently rescaled would mask it, and the
-    // verbatim-passthrough specs above would go red under a manual `npm test`
-    // — there is NO CI in this repo yet). Live ETL drift itself is caught
-    // only by scripts/parity-webdev194.mjs, not by this fixture.
+    // verbatim-passthrough specs above would go red in CI and in the Vercel
+    // build gate). Live ETL drift itself is caught at runtime by the
+    // assertFractionScale sentinel and daily by scripts/parity-webdev194.mjs,
+    // not by this fixture.
     const rec = mapSnapshotRow(snapshotRow({ ctr: "4.054054" }));
     const ctr = rec.fields["CTR"];
 

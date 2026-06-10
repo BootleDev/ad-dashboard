@@ -5,7 +5,7 @@
  * casing), and any unrecognized non-empty value must WARN so the typo is
  * visible in the Vercel logs instead of silently no-oping the rollback.
  *
- * Run manually via `npm test` — there is NO CI in this repo yet.
+ * Runs in CI on every PR/push and gates every Vercel deploy (WEBDEV-210).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
