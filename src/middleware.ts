@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { verifyAuthToken, getAuthCookieName } from "@/lib/auth";
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow login page, API routes, and static assets
+  // Allow login page, API routes, and static assets. API routes are NOT gated
+  // here — each handler enforces its own auth (the /api/auth login endpoint
+  // must stay reachable, and /api/airtable + /api/chat verify the HMAC cookie
+  // server-side via isAuthenticatedRequest).
   if (
     pathname === "/login" ||
     pathname.startsWith("/api/") ||
@@ -14,8 +18,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const authCookie = request.cookies.get("bootle_dash_auth");
-  if (authCookie?.value !== "authenticated") {
+  // WEBDEV-211: verify the HMAC session cookie instead of the old forgeable
+  // `=== "authenticated"` literal. Fail closed when the secret is unset.
+  const password = process.env.DASHBOARD_PASSWORD;
+  const token = request.cookies.get(getAuthCookieName())?.value ?? "";
+  if (!password || !(await verifyAuthToken(token, password))) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

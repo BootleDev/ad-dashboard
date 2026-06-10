@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import {
   getAllDashboardData,
   getAdSnapshots,
@@ -8,10 +7,10 @@ import {
   getAlerts,
   getShopifySales,
 } from "@/lib/airtable";
+import { isAuthenticatedRequest } from "@/lib/authServer";
 
 export async function GET(request: Request) {
-  const cookieStore = await cookies();
-  if (cookieStore.get("bootle_dash_auth")?.value !== "authenticated") {
+  if (!(await isAuthenticatedRequest())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
