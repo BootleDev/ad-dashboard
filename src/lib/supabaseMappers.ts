@@ -33,11 +33,14 @@
  * The mappers pass values through VERBATIM (pg numeric arrives as a string;
  * num() in the components parses it identically). supabaseMappers.test.ts
  * locks the MAPPERS to that verbatim passthrough — a mapper that starts
- * scaling or normalizing rate values fails `npm test` (run manually; this
- * repo has NO CI yet, so nothing runs the suite automatically). Upstream ETL
- * drift (the writer starting to store percents instead of fractions) is NOT
- * caught by those fixture tests — only the manual
- * scripts/parity-webdev194.mjs covers that.
+ * scaling or normalizing rate values fails the vitest suite, which runs on
+ * every PR/push (.github/workflows/ci.yml) and gates every Vercel deploy
+ * (vercel.json buildCommand). Upstream ETL drift (the writer starting to
+ * store percents instead of fractions) is NOT caught by these fixture tests —
+ * the runtime sentinel (./rateSentinel, WEBDEV-210) trips the read over to
+ * the Airtable fallback, and the scheduled parity run
+ * (.github/workflows/parity.yml -> scripts/parity-webdev194.mjs) cross-checks
+ * both stores daily while the dual-write window lasts.
  *
  * CRITICAL cross-source join: src/lib/utils.ts merges Creative Tags (which
  * stay on Airtable) into snapshots keyed by the "Ad ID" display field. The

@@ -1,0 +1,40 @@
+# Scheduled Supabase<->Airtable parity proof (WEBDEV-210, item c).
+#
+# Runs scripts/parity-webdev194.mjs daily against the FULL tables on both
+# sides — the runtime sentinel only catches magnitude drift above 1, while
+# this catches ANY value/shape/count divergence, using the exact production
+# mappers the app ships.
+#
+# TEMPORARY: only meaningful during the dual-write window (n8n still writes
+# both stores). When the WEBDEV-191 ETL rewrite retires the Airtable
+# dual-writes, DELETE this file and the three repo secrets it uses
+# (SUPABASE_DB_URL / AIRTABLE_API_KEY / AIRTABLE_BASE_ID).
+#
+# The script self-skips (exit 0) when the secrets are absent, so a fork or a
+# secretless run never flakes. On failure GitHub emails the workflow author.
+# 04:35 UTC sits between the n8n 6-hourly refresh writes to avoid racing a
+# mid-flight dual-write.
+name: Parity (dual-write window)
+
+on:
+  schedule:
+    - cron: "35 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # The script imports ../src/lib/supabaseMappers.ts via Node's native
+          # TypeScript type-stripping — needs Node >= 22.18; 24 matches Vercel.
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/parity-webdev194.mjs
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}

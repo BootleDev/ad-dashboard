@@ -56,6 +56,7 @@ import {
   mapAlertRow,
   mapShopifySalesRow,
 } from "./supabaseMappers";
+import { assertFractionScale } from "./rateSentinel";
 
 // int8 (OID 20): return as a JS number, not a string. The daily_aggregates
 // view computes bigint columns (count(*)/sum() -> Impressions, Reach, Clicks,
@@ -186,11 +187,15 @@ async function withTimeout<T>(label: string, read: Promise<T>): Promise<T> {
 // fraction-vs-percent invariant and the exact emitted key set / id synthesis /
 // sparse-shape rule / "Ad ID" tag-join identity — is pinned there by
 // supabaseMappers.test.ts, which locks the MAPPERS to verbatim passthrough: a
-// mapper that starts scaling or normalizing fails `npm test` (run manually —
-// this repo has NO CI yet, so nothing runs the suite automatically). Upstream
-// ETL drift (the writer starting to store percents) is NOT caught by those
-// fixture tests; only the manual scripts/parity-webdev194.mjs covers that.
-// Each getter below just runs the query and maps each row through the matching
+// mapper that starts scaling or normalizing fails the vitest suite, which runs
+// on every PR/push (.github/workflows/ci.yml) and gates every Vercel deploy
+// (vercel.json buildCommand). Upstream ETL drift (the writer starting to store
+// percents) is NOT caught by those fixture tests — at runtime the
+// assertFractionScale sentinel (./rateSentinel, WEBDEV-210) trips the getter
+// over to the Airtable fallback, and the scheduled parity run
+// (.github/workflows/parity.yml -> scripts/parity-webdev194.mjs) cross-checks
+// both stores daily while the dual-write window lasts. Each getter below runs
+// its query, sentinels the raw rows, and maps each row through the matching
 // pure mapper.
 
 // ---------------------------------------------------------------------------
@@ -215,6 +220,14 @@ export async function getAdSnapshotsFromSupabase(): Promise<AirtableRecord[]> {
            from marketing.ad_snapshots
           order by snapshot_date desc, snapshot_id asc`,
       );
+      // Runtime unit-scale tripwire (WEBDEV-210): percent-scale drift on the
+      // fraction rates throws here, landing in getAdSnapshots()'s catch ->
+      // Airtable fallback. ROAS/Frequency are multiples — never listed.
+      assertFractionScale("marketing.ad_snapshots", rows, {
+        throwOn: ["ctr", "cvr"],
+        warnOn: ["hook_rate", "hold_rate"],
+        idCol: "snapshot_id",
+      });
       return rows.map(mapSnapshotRow);
     })(),
   );
@@ -237,6 +250,12 @@ export async function getDailyAggregatesFromSupabase(): Promise<
            from marketing.daily_aggregates
           order by date desc`,
       );
+      // Same WEBDEV-210 tripwire as ad_snapshots; blended_ctr is the view's
+      // only fraction-scale rate (cpc/cpm/roas/cpa are currency/multiples).
+      assertFractionScale("marketing.daily_aggregates", rows, {
+        throwOn: ["blended_ctr"],
+        idCol: "date",
+      });
       return rows.map(mapDailyAggregateRow);
     })(),
   );
