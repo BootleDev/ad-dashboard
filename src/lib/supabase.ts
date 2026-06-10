@@ -220,13 +220,16 @@ export async function getAdSnapshotsFromSupabase(): Promise<AirtableRecord[]> {
            from marketing.ad_snapshots
           order by snapshot_date desc, snapshot_id asc`,
       );
-      // Runtime unit-scale tripwire (WEBDEV-210): percent-scale drift on the
-      // fraction rates throws here, landing in getAdSnapshots()'s catch ->
-      // Airtable fallback. ROAS/Frequency are multiples — never listed.
+      // Runtime unit-scale tripwire (WEBDEV-210): percent-scale drift on ctr
+      // throws here, landing in getAdSnapshots()'s catch -> Airtable fallback.
+      // cvr is warn-only: purchases include Meta VIEW-THROUGH attribution, so
+      // purchases/clicks can legitimately exceed 1 on low-click days (a
+      // percent-drifted writer still trips ctr on the same rows, which fails
+      // the whole read over). ROAS/Frequency are multiples — never listed.
       assertFractionScale("marketing.ad_snapshots", rows, {
-        throwOn: ["ctr", "cvr"],
-        warnOn: ["hook_rate", "hold_rate"],
-        idCol: "snapshot_id",
+        throwOn: ["ctr"],
+        warnOn: ["cvr", "hook_rate", "hold_rate"],
+        idCols: ["snapshot_id"],
       });
       return rows.map(mapSnapshotRow);
     })(),
@@ -254,7 +257,7 @@ export async function getDailyAggregatesFromSupabase(): Promise<
       // only fraction-scale rate (cpc/cpm/roas/cpa are currency/multiples).
       assertFractionScale("marketing.daily_aggregates", rows, {
         throwOn: ["blended_ctr"],
-        idCol: "date",
+        idCols: ["date"],
       });
       return rows.map(mapDailyAggregateRow);
     })(),

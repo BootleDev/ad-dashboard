@@ -33,6 +33,24 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # The script SELF-SKIPS (exit 0) without credentials — safe for forks,
+      # but in THIS repo the secrets are expected, and a silent skip would
+      # show green forever if they were ever deleted/renamed. Fail loudly
+      # instead.
+      - name: Require parity secrets (script would silently self-skip)
+        run: |
+          missing=""
+          [ -n "$SUPABASE_DB_URL" ] || missing="$missing SUPABASE_DB_URL"
+          [ -n "$AIRTABLE_API_KEY" ] || missing="$missing AIRTABLE_API_KEY"
+          [ -n "$AIRTABLE_BASE_ID" ] || missing="$missing AIRTABLE_BASE_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::parity secrets missing:$missing — the parity check is NOT running"
+            exit 1
+          fi
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+          AIRTABLE_BASE_ID: ${{ secrets.AIRTABLE_BASE_ID }}
       - run: node scripts/parity-webdev194.mjs
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}

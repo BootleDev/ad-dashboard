@@ -20,13 +20,19 @@
  * correctly-scaled data, with the error in the Vercel logs — still the right
  * trade.)
  *
- * Column policy (from the WEBDEV-194 deep review):
- *   - throwOn:  ctr / cvr / blended_ctr — clicks-per-impression and
- *     purchases-per-click cannot legitimately exceed 1 (100%) at fraction
- *     scale; a value > 1 means percent-scale drift.
- *   - warnOn:   hook_rate / hold_rate — video-view rates CAN edge past 1 in
- *     rare legitimate cases (re-watches count multiple views against one
- *     impression), so they only console.warn.
+ * Column policy (WEBDEV-194 deep review, revised by the WEBDEV-210 review):
+ *   - throwOn:  ctr / blended_ctr — clicks-per-impression cannot meaningfully
+ *     exceed 1 (100%) at fraction scale; a value > 1 means percent-scale
+ *     drift. NEGATIVE values also throw — a rate outside [0, 1] is corrupt
+ *     whatever the cause.
+ *   - warnOn:   cvr / hook_rate / hold_rate — these CAN legitimately edge
+ *     past 1: cvr is purchases/clicks where purchases include Meta
+ *     VIEW-THROUGH attribution (purchases can outnumber clicks on low-click
+ *     retargeting days — verified in the n8n ETL formula), and video-view
+ *     rates can count re-watches against one impression. They only
+ *     console.warn. Drift detection is NOT weakened: a writer that drifts to
+ *     percents drifts ctr on the same rows, which throws and fails the whole
+ *     read over anyway.
  *   - NEVER list roas / frequency — they are multiples (3.17x, 1.28) and
  *     legitimately exceed 1.
  *
@@ -40,12 +46,16 @@
 type Row = Record<string, unknown>;
 
 export interface RateSentinelCols {
-  /** Columns whose value > 1 throws (fails the Supabase read over to Airtable). */
+  /** Columns whose value outside [0, 1] throws (fails the Supabase read over to Airtable). */
   throwOn: readonly string[];
-  /** Columns whose value > 1 only logs a console.warn. */
+  /** Columns whose value outside [0, 1] only logs a console.warn. */
   warnOn?: readonly string[];
-  /** Column used to identify the first offending row in messages (e.g. "snapshot_id"). */
-  idCol?: string;
+  /**
+   * Columns concatenated with "|" to identify the first offending row in
+   * messages (e.g. ["snapshot_id"]; a composite like ["platform", "date"]
+   * when no single column is unique).
+   */
+  idCols?: readonly string[];
 }
 
 /** Number(v) for numbers and pg numeric strings; NaN for everything else. */
@@ -63,10 +73,23 @@ interface ColumnViolation {
   exampleValue: unknown;
 }
 
+function rowId(
+  row: Row,
+  index: number,
+  idCols: readonly string[] | undefined,
+): string {
+  if (!idCols || idCols.length === 0) return `row ${index}`;
+  const parts = idCols.map((c) =>
+    row[c] === null || row[c] === undefined ? "?" : String(row[c]),
+  );
+  // All id columns empty -> fall back to the row index.
+  return parts.every((p) => p === "?") ? `row ${index}` : parts.join("|");
+}
+
 function scanColumn(
   rows: Row[],
   column: string,
-  idCol: string | undefined,
+  idCols: readonly string[] | undefined,
 ): ColumnViolation | null {
   let count = 0;
   let max = -Infinity;
@@ -80,11 +103,13 @@ function scanColumn(
     if (v === null || v === undefined) continue;
     const n = asNumber(v);
     if (!Number.isFinite(n)) continue;
-    if (n > 1) {
+    // A fraction-scale rate lives in [0, 1]: > 1 is the percent-drift
+    // signature, < 0 is corrupt whatever the cause.
+    if (n > 1 || n < 0) {
       count++;
       if (n > max) max = n;
       if (count === 1) {
-        exampleId = idCol ? String(rows[i][idCol] ?? `row ${i}`) : `row ${i}`;
+        exampleId = rowId(rows[i], i, idCols);
         exampleValue = v;
       }
     }
@@ -95,9 +120,9 @@ function scanColumn(
 }
 
 /**
- * Assert that the listed rate columns are fraction-scale (<= 1) across all
- * rows. Throws on any throwOn violation; console.warns on warnOn violations.
- * Values of exactly 1 (a true 100% rate) pass.
+ * Assert that the listed rate columns are fraction-scale (within [0, 1])
+ * across all rows. Throws on any throwOn violation; console.warns on warnOn
+ * violations. Values of exactly 0 or 1 (true 0% / 100% rates) pass.
  */
 export function assertFractionScale(
   source: string,
@@ -105,10 +130,10 @@ export function assertFractionScale(
   cols: RateSentinelCols,
 ): void {
   for (const column of cols.warnOn ?? []) {
-    const v = scanColumn(rows, column, cols.idCol);
+    const v = scanColumn(rows, column, cols.idCols);
     if (v) {
       console.warn(
-        `[unit-sentinel] ${source}: ${v.column} > 1 in ${v.count}/${rows.length} rows ` +
+        `[unit-sentinel] ${source}: ${v.column} outside [0, 1] in ${v.count}/${rows.length} rows ` +
           `(max ${v.max}, e.g. ${v.exampleId} = ${JSON.stringify(v.exampleValue)}) — ` +
           `tolerated (this rate can legitimately exceed 1), but if a throwOn ` +
           `metric also trips, suspect percent-scale writer drift.`,
@@ -117,22 +142,23 @@ export function assertFractionScale(
   }
 
   const violations = cols.throwOn
-    .map((column) => scanColumn(rows, column, cols.idCol))
+    .map((column) => scanColumn(rows, column, cols.idCols))
     .filter((v): v is ColumnViolation => v !== null);
 
   if (violations.length > 0) {
     const detail = violations
       .map(
         (v) =>
-          `${v.column} > 1 in ${v.count}/${rows.length} rows ` +
+          `${v.column} outside [0, 1] in ${v.count}/${rows.length} rows ` +
           `(max ${v.max}, e.g. ${v.exampleId} = ${JSON.stringify(v.exampleValue)})`,
       )
       .join("; ");
     throw new Error(
       `[unit-sentinel] ${source}: ${detail}. Rate columns must be FRACTIONS ` +
-        `(0.0405 = 4.05%) — values above 1 mean the upstream writer drifted to ` +
-        `percent scale, which the dashboard would render 100x too large. ` +
-        `Failing this read so the caller falls back to Airtable.`,
+        `in [0, 1] (0.0405 = 4.05%) — values above 1 mean the upstream writer ` +
+        `drifted to percent scale (rendered 100x too large by the dashboard); ` +
+        `negative values are corrupt either way. Failing this read so the ` +
+        `caller falls back to Airtable.`,
     );
   }
 }

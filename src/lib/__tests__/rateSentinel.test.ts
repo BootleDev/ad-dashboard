@@ -1,8 +1,13 @@
 /**
- * Locks the runtime unit-scale sentinel (WEBDEV-210): percent-scale drift on
- * a throwOn rate column must THROW (so the getter fails over to Airtable),
- * warnOn columns must only console.warn, and multiples (ROAS / Frequency)
- * must never be subject to either — they are simply not listed.
+ * Locks the runtime unit-scale sentinel (WEBDEV-210): a throwOn rate column
+ * outside [0, 1] must THROW (so the getter fails over to Airtable), warnOn
+ * columns must only console.warn, and multiples (ROAS / Frequency) must never
+ * be subject to either — they are simply not listed.
+ *
+ * Column policy mirror of src/lib/supabase.ts: ctr is throwOn; cvr is
+ * warn-only (purchases include Meta view-through attribution, so
+ * purchases/clicks can legitimately exceed 1 on low-click days); hook/hold
+ * rates warn-only (re-watch overshoot).
  *
  * The fixtures use pg-shaped rows: numeric columns arrive as STRINGS from
  * node-pg (e.g. "0.04054054"), so the sentinel must parse, not typeof-gate.
@@ -10,10 +15,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { assertFractionScale } from "../rateSentinel";
 
+// Mirrors the production policy for marketing.ad_snapshots in supabase.ts.
 const SNAPSHOT_COLS = {
-  throwOn: ["ctr", "cvr"],
-  warnOn: ["hook_rate", "hold_rate"],
-  idCol: "snapshot_id",
+  throwOn: ["ctr"],
+  warnOn: ["cvr", "hook_rate", "hold_rate"],
+  idCols: ["snapshot_id"],
 } as const;
 
 /** A healthy fraction-scale row as pg returns it (numerics as strings). */
@@ -51,14 +57,16 @@ describe("assertFractionScale — pass cases", () => {
     ).not.toThrow();
   });
 
-  it("passes at exactly 1 (a true 100% rate is legitimate; the check is strictly > 1)", () => {
+  it("passes at exactly 0 and exactly 1 (true 0% / 100% rates; the range check is exclusive)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(() =>
       assertFractionScale(
         "marketing.ad_snapshots",
-        [healthyRow({ ctr: "1", cvr: 1 })],
+        [healthyRow({ ctr: "1", cvr: 0, hook_rate: "0" })],
         SNAPSHOT_COLS,
       ),
     ).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("skips null / undefined / missing cells (Airtable-sparse parity)", () => {
@@ -81,7 +89,7 @@ describe("assertFractionScale — pass cases", () => {
     ).not.toThrow();
   });
 
-  it("ignores multiples > 1 on columns that are not listed (ROAS 3.17, Frequency 1.28)", () => {
+  it("ignores multiples > 1 on columns that are not listed (ROAS 317.5, Frequency 12.8)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(() =>
       assertFractionScale(
@@ -108,28 +116,38 @@ describe("assertFractionScale — throwOn (percent-scale drift)", () => {
     ).toThrow(
       // The sentinel's error is a single line, so plain `.*` spans it (the
       // repo tsconfig target predates the es2018 `s` flag).
-      /marketing\.ad_snapshots.*ctr > 1 in 1\/2 rows.*drifted-2026-01-27.*"4\.05".*FRACTIONS/,
+      /marketing\.ad_snapshots.*ctr outside \[0, 1\] in 1\/2 rows.*drifted-2026-01-27.*"4\.05".*FRACTIONS/,
     );
   });
 
-  it("throws on percent-scale cvr (plain number, not just pg string)", () => {
+  it("throws on a NEGATIVE throwOn value — a rate outside [0, 1] is corrupt in either direction", () => {
     expect(() =>
       assertFractionScale(
         "marketing.ad_snapshots",
-        [healthyRow({ cvr: 2.27 })],
+        [healthyRow({ ctr: "-0.04" })],
         SNAPSHOT_COLS,
       ),
-    ).toThrow(/cvr > 1/);
+    ).toThrow(/ctr outside \[0, 1\] in 1\/1 rows/);
   });
 
-  it("reports every drifted throwOn column in one error", () => {
+  it("throws on a plain-number percent value too (not just pg strings)", () => {
     expect(() =>
       assertFractionScale(
         "marketing.ad_snapshots",
-        [healthyRow({ ctr: "4.05", cvr: "2.27" })],
+        [healthyRow({ ctr: 4.05 })],
         SNAPSHOT_COLS,
       ),
-    ).toThrow(/ctr > 1 in 1\/1 rows.*cvr > 1 in 1\/1 rows/);
+    ).toThrow(/ctr outside \[0, 1\]/);
+  });
+
+  it("reports every drifted throwOn column in one error (generic multi-column policy)", () => {
+    expect(() =>
+      assertFractionScale(
+        "test.source",
+        [{ id: "r1", a: "4.05", b: "2.27" }],
+        { throwOn: ["a", "b"], idCols: ["id"] },
+      ),
+    ).toThrow(/a outside \[0, 1\] in 1\/1 rows.*b outside \[0, 1\] in 1\/1 rows/);
   });
 
   it("throws for blended_ctr with the daily_aggregates column policy", () => {
@@ -137,12 +155,12 @@ describe("assertFractionScale — throwOn (percent-scale drift)", () => {
       assertFractionScale(
         "marketing.daily_aggregates",
         [{ date: "2026-01-26", blended_ctr: "2.36", roas: "3.1" }],
-        { throwOn: ["blended_ctr"], idCol: "date" },
+        { throwOn: ["blended_ctr"], idCols: ["date"] },
       ),
-    ).toThrow(/blended_ctr > 1.*2026-01-26/);
+    ).toThrow(/blended_ctr outside \[0, 1\].*2026-01-26/);
   });
 
-  it("falls back to the row index when idCol is absent from the row", () => {
+  it("falls back to the row index when every id column is absent from the row", () => {
     expect(() =>
       assertFractionScale(
         "marketing.ad_snapshots",
@@ -151,9 +169,32 @@ describe("assertFractionScale — throwOn (percent-scale drift)", () => {
       ),
     ).toThrow(/row 0/);
   });
+
+  it("joins composite idCols with | in the example id", () => {
+    expect(() =>
+      assertFractionScale(
+        "test.source",
+        [{ platform: "Instagram", date: "2026-06-01", er: "8.7" }],
+        { throwOn: ["er"], idCols: ["platform", "date"] },
+      ),
+    ).toThrow(/Instagram\|2026-06-01/);
+  });
 });
 
 describe("assertFractionScale — warnOn (tolerated overshoot)", () => {
+  it("console.warns without throwing when cvr exceeds 1 (view-through purchases > clicks)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(() =>
+      assertFractionScale(
+        "marketing.ad_snapshots",
+        [healthyRow({ cvr: "2.0" })],
+        SNAPSHOT_COLS,
+      ),
+    ).not.toThrow();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toMatch(/cvr outside \[0, 1\] in 1\/1 rows/);
+  });
+
   it("console.warns without throwing when hook_rate exceeds 1", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(() =>
@@ -164,7 +205,7 @@ describe("assertFractionScale — warnOn (tolerated overshoot)", () => {
       ),
     ).not.toThrow();
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toMatch(/hook_rate > 1 in 1\/1 rows/);
+    expect(warn.mock.calls[0][0]).toMatch(/hook_rate outside \[0, 1\] in 1\/1 rows/);
   });
 
   it("still throws on a throwOn violation when a warnOn column also trips (warn first, then throw)", () => {
@@ -175,8 +216,8 @@ describe("assertFractionScale — warnOn (tolerated overshoot)", () => {
         [healthyRow({ ctr: "4.05", hold_rate: "1.5" })],
         SNAPSHOT_COLS,
       ),
-    ).toThrow(/ctr > 1/);
+    ).toThrow(/ctr outside \[0, 1\]/);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toMatch(/hold_rate > 1/);
+    expect(warn.mock.calls[0][0]).toMatch(/hold_rate outside \[0, 1\]/);
   });
 });
