@@ -23,7 +23,14 @@ export default function LoginPage() {
     if (res.ok) {
       router.push("/dashboard");
     } else {
-      setError("Wrong password");
+      // 429 = rate limited; surface the server's message instead of the
+      // misleading "Wrong password" (WEBDEV-211 review).
+      const body = await res.json().catch(() => ({}));
+      setError(
+        res.status === 429
+          ? body.error || "Too many attempts. Try again in a minute."
+          : "Wrong password",
+      );
       setLoading(false);
     }
   }

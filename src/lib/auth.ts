@@ -14,6 +14,17 @@
  * Web Crypto (crypto.subtle) is used so the same module works in both the Edge
  * (middleware) and Node (route handler) runtimes — do NOT import next/headers
  * here, that would break the Edge bundle.
+ *
+ * ACCEPTED LIMITATION (WEBDEV-211 review): the token is HMAC(password, fixed
+ * context), so it is CONSTANT per password — there is no per-session nonce or
+ * server-side session store. A leaked cookie stays valid until DASHBOARD_PASSWORD
+ * is rotated (which logs everyone out), and the only expiry is the 7-day cookie
+ * maxAge. This is an accepted trade-off for an internal single-user dashboard
+ * and matches the social-dashboard / social-studio scheme; adding per-session
+ * revocation across all three apps is a tracked follow-up, not a blocker here.
+ * The rate limiter below is in-memory and per-serverless-instance (resets on
+ * cold start) — adequate against online guessing of the 16-char secret, not a
+ * distributed-store guarantee.
  */
 
 const COOKIE_NAME = "bootle_dash_auth";
