@@ -1,3 +1,11 @@
+import {
+  hasSupabaseDbUrl,
+  getAdSnapshotsFromSupabase,
+  getDailyAggregatesFromSupabase,
+  getAlertsFromSupabase,
+  getShopifySalesFromSupabase,
+} from "./supabase";
+
 const BASE_URL = "https://api.airtable.com/v0";
 const BASE_ID = process.env.AIRTABLE_BASE_ID!;
 const API_KEY = process.env.AIRTABLE_API_KEY!;
@@ -71,32 +79,141 @@ async function fetchAllRecords(
   return allRecords;
 }
 
-export async function getAdSnapshots() {
+// ---------------------------------------------------------------------------
+// WEBDEV-194 (ad-dashboard cutover): four getters are repointed to Supabase,
+// each behind a per-table kill switch and each FAIL-FAST to the original
+// Airtable read on ANY error, timeout, or empty result. The Supabase reads
+// return the SAME { id, fields:{<Airtable display names>}, createdTime }
+// envelope, so the /api routes and components are untouched. CREATIVE_TAGS is
+// NOT migrated (hybrid human+machine data) and stays on Airtable below.
+//
+// Per-table kill switches (force Airtable even when SUPABASE_DB_URL is present):
+//   AD_SNAPSHOTS_SOURCE=airtable
+//   DAILY_AGGREGATES_SOURCE=airtable
+//   AD_ALERTS_SOURCE=airtable
+//   SHOPIFY_SALES_SOURCE=airtable
+//
+// CACHING NOTE: the Airtable fetch path uses next:{revalidate:1800}; the pg
+// path is per-request (no Next data cache). Internal dashboard behind cookie
+// auth — acceptable.
+// ---------------------------------------------------------------------------
+
+function forcedToAirtable(envVar: string | undefined): boolean {
+  return envVar?.toLowerCase() === "airtable";
+}
+
+async function getAdSnapshotsFromAirtable() {
   return fetchAllRecords(TABLES.AD_SNAPSHOTS, {
     sort: [{ field: "Snapshot Date", direction: "desc" }],
   });
 }
 
+export async function getAdSnapshots() {
+  if (
+    !forcedToAirtable(process.env.AD_SNAPSHOTS_SOURCE) &&
+    hasSupabaseDbUrl()
+  ) {
+    try {
+      const rows = await getAdSnapshotsFromSupabase();
+      if (rows.length > 0) return rows;
+      console.warn(
+        "[ad-snapshots] Supabase returned no rows; falling back to Airtable",
+      );
+    } catch (err) {
+      console.error(
+        "[ad-snapshots] Supabase read failed; falling back to Airtable:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  return getAdSnapshotsFromAirtable();
+}
+
+// CREATIVE_TAGS stays on Airtable BY DESIGN (hybrid human tags + machine
+// composite scores; not migrated). Do not repoint.
 export async function getCreativeTags() {
   return fetchAllRecords(TABLES.CREATIVE_TAGS);
 }
 
-export async function getDailyAggregates() {
+async function getDailyAggregatesFromAirtable() {
   return fetchAllRecords(TABLES.DAILY_AGGREGATES, {
     sort: [{ field: "Date", direction: "desc" }],
   });
 }
 
-export async function getAlerts() {
+export async function getDailyAggregates() {
+  if (
+    !forcedToAirtable(process.env.DAILY_AGGREGATES_SOURCE) &&
+    hasSupabaseDbUrl()
+  ) {
+    try {
+      const rows = await getDailyAggregatesFromSupabase();
+      if (rows.length > 0) return rows;
+      console.warn(
+        "[daily-aggregates] Supabase returned no rows; falling back to Airtable",
+      );
+    } catch (err) {
+      console.error(
+        "[daily-aggregates] Supabase read failed; falling back to Airtable:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  return getDailyAggregatesFromAirtable();
+}
+
+async function getAlertsFromAirtable() {
   return fetchAllRecords(TABLES.ALERTS_LOG, {
     sort: [{ field: "Alert Date", direction: "desc" }],
   });
 }
 
-export async function getShopifySales() {
+// NOTE: marketing.ad_alerts currently has 0 rows on BOTH sides (ad account
+// paused), so this getter fails over on-empty to Airtable (also empty) —
+// harmless and by design. The mapper is still fully unit-tested from fixtures.
+export async function getAlerts() {
+  if (!forcedToAirtable(process.env.AD_ALERTS_SOURCE) && hasSupabaseDbUrl()) {
+    try {
+      const rows = await getAlertsFromSupabase();
+      if (rows.length > 0) return rows;
+      console.warn(
+        "[ad-alerts] Supabase returned no rows; falling back to Airtable",
+      );
+    } catch (err) {
+      console.error(
+        "[ad-alerts] Supabase read failed; falling back to Airtable:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  return getAlertsFromAirtable();
+}
+
+async function getShopifySalesFromAirtable() {
   return fetchAllRecords(TABLES.SHOPIFY_DAILY_SALES, {
     sort: [{ field: "Date", direction: "desc" }],
   });
+}
+
+export async function getShopifySales() {
+  if (
+    !forcedToAirtable(process.env.SHOPIFY_SALES_SOURCE) &&
+    hasSupabaseDbUrl()
+  ) {
+    try {
+      const rows = await getShopifySalesFromSupabase();
+      if (rows.length > 0) return rows;
+      console.warn(
+        "[shopify-sales] Supabase returned no rows; falling back to Airtable",
+      );
+    } catch (err) {
+      console.error(
+        "[shopify-sales] Supabase read failed; falling back to Airtable:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+  return getShopifySalesFromAirtable();
 }
 
 // Convenience: get all data for dashboard
