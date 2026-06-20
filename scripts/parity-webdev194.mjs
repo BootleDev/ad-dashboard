@@ -228,7 +228,7 @@ function compareTable(
   console.log(`  matched by natural key: ${matched}/${sb.length}`);
   for (const [key, n] of divergenceReport) {
     console.log(
-      `  documented divergence "${key}": ${n} row(s) differ (view count(*) vs Airtable's historical blank/Status-derived values — intentional)`,
+      `  documented divergence "${key}": ${n} row(s) differ (intentional — see allowedDivergence comment above)`,
     );
   }
 }
@@ -253,6 +253,14 @@ function compareTable(
   compareTable("ad_snapshots", sb, at, {
     keyOf: (f) => String(f["Snapshot ID"]),
     sortKey: "Snapshot Date",
+    // "Campaign Status" and "Ad Status" are Airtable-only mutable status fields.
+    // n8n updates them live as Meta campaign/ad statuses change; they are NOT
+    // written into marketing.ad_snapshots (which stores the immutable daily
+    // performance snapshot at capture time). Excluding them from parity avoids
+    // false failures whenever a campaign is paused/resumed after snapshot date.
+    // Row count and all other snapshot fields (spend, impressions, ROAS, etc.)
+    // must still match exactly.
+    allowedDivergence: ["Campaign Status", "Ad Status"],
   });
 
   // Unit spot-report (fractions vs multiples), from live data:
