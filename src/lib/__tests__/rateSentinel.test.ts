@@ -1,6 +1,7 @@
 /**
  * Locks the runtime unit-scale sentinel (WEBDEV-210): a throwOn rate column
- * outside [0, 1] must THROW (so the getter fails over to Airtable), warnOn
+ * outside [0, 1] must THROW (so the getter returns a 500; WEBDEV-216 retired
+ * the Airtable fallback), warnOn
  * columns must only console.warn, and multiples (ROAS / Frequency) must never
  * be subject to either — they are simply not listed.
  *
