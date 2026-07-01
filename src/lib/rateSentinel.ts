@@ -7,18 +7,16 @@
  * dual-write would visibly break in Airtable if the writer switched to
  * percents) and locked at the mapper layer by supabaseMappers.test.ts — but
  * the mapper tests run on FIXTURES, so nothing at runtime notices if the
- * upstream writer ever starts storing percent-scale values in Postgres. Once
- * the WEBDEV-191 ETL rewrite retires the Airtable dual-write, this sentinel
- * is the ONLY thing standing between writer drift and every CTR rendering
- * 100x too large.
+ * upstream writer ever starts storing percent-scale values in Postgres. With
+ * the Supabase read as the sole source (WEBDEV-216 retired the Airtable
+ * fallback), this sentinel is the ONLY thing standing between writer drift and
+ * every CTR rendering 100x too large.
  *
  * Mechanism: scan the raw pg rows inside each Supabase getter, BEFORE the
- * mapped envelope is returned. A violation on a throwOn column throws, which
- * lands in the caller's existing catch in airtable.ts and FAILS OVER to the
- * Airtable read — a loud, correct degradation instead of silently-wrong
- * charts. (After dual-write retirement that failover serves stale-but-
- * correctly-scaled data, with the error in the Vercel logs — still the right
- * trade.)
+ * mapped envelope is returned. A violation on a throwOn column throws; the
+ * error propagates to the caller (the route's try/catch → 500) — a loud,
+ * correct 500 instead of silently-wrong charts. (WEBDEV-216 retired the
+ * Airtable failover this used to trip the read over to.)
  *
  * Column policy (WEBDEV-194 deep review, revised by the WEBDEV-210 review):
  *   - throwOn:  ctr / blended_ctr — clicks-per-impression cannot meaningfully
@@ -32,7 +30,7 @@
  *     rates can count re-watches against one impression. They only
  *     console.warn. Drift detection is NOT weakened: a writer that drifts to
  *     percents drifts ctr on the same rows, which throws and fails the whole
- *     read over anyway.
+ *     read anyway.
  *   - NEVER list roas / frequency — they are multiples (3.17x, 1.28) and
  *     legitimately exceed 1.
  *
@@ -46,7 +44,7 @@
 type Row = Record<string, unknown>;
 
 export interface RateSentinelCols {
-  /** Columns whose value outside [0, 1] throws (fails the Supabase read over to Airtable). */
+  /** Columns whose value outside [0, 1] throws (fails the Supabase read → 500). */
   throwOn: readonly string[];
   /** Columns whose value outside [0, 1] only logs a console.warn. */
   warnOn?: readonly string[];
@@ -158,7 +156,7 @@ export function assertFractionScale(
         `in [0, 1] (0.0405 = 4.05%) — values above 1 mean the upstream writer ` +
         `drifted to percent scale (rendered 100x too large by the dashboard); ` +
         `negative values are corrupt either way. Failing this read so the ` +
-        `caller falls back to Airtable.`,
+        `caller returns a 500 instead of rendering wrong-scale rates.`,
     );
   }
 }

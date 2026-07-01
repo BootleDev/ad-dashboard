@@ -37,8 +37,9 @@
  * every PR/push (.github/workflows/ci.yml) and gates every Vercel deploy
  * (vercel.json buildCommand). Upstream ETL drift (the writer starting to
  * store percents instead of fractions) is NOT caught by these fixture tests —
- * the runtime sentinel (./rateSentinel, WEBDEV-210) trips the read over to
- * the Airtable fallback, and the scheduled parity run
+ * the runtime sentinel (./rateSentinel, WEBDEV-210) throws, and the error
+ * propagates to the caller (the route's try/catch → 500; WEBDEV-216 retired
+ * the Airtable fallback), and the scheduled parity run
  * (.github/workflows/parity.yml -> scripts/parity-webdev194.mjs) cross-checks
  * both stores daily while the dual-write window lasts.
  *

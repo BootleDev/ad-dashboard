@@ -32,9 +32,11 @@
  *     escalating to an uncaught exception that crashes the process
  *   - the connect/query timeouts below time-bound a slow/hung pooler, and every
  *     read is additionally wrapped in a Promise.race(4000ms) so a stall ALWAYS
- *     fails over to Airtable fast (the Supavisor pooler may not honour
- *     statement_timeout) — hang-not-failover was a real blocker on the first
- *     cutover
+ *     rejects fast (the Supavisor pooler may not honour statement_timeout) —
+ *     the rejection then propagates to the caller (the route's try/catch → 500)
+ *     rather than hanging the dashboard. WEBDEV-216 retired the Airtable read
+ *     fallback these getters used to fail over to; a hang was a real blocker on
+ *     the first cutover
  *   - setTypeParser(1082, identity) so a `date` column comes back as its raw
  *     "YYYY-MM-DD" string (matching the Airtable date strings exactly) rather
  *     than a JS Date, which would shift under the server's timezone.
@@ -75,8 +77,9 @@ const DB_URL = process.env.SUPABASE_DB_URL;
 
 // Hard ceiling on the whole Supabase read (connect + TLS + query). Belt-and-
 // suspenders over the pg-level timeouts below: the Supavisor pooler may not
-// honour statement_timeout, so a Promise.race guarantees each getter fails over
-// to Airtable rather than hanging the dashboard / chat route.
+// honour statement_timeout, so a Promise.race guarantees each getter rejects
+// (propagating to the caller's try/catch → 500) rather than hanging the
+// dashboard / chat route. WEBDEV-216 retired the Airtable read fallback.
 const SUPABASE_READ_TIMEOUT_MS = 4000;
 
 let pool: pg.Pool | null = null;
@@ -127,7 +130,8 @@ function getPool(): pg.Pool {
       // self-signed root is not in the system trust store). See ./supabase-ca.
       ssl: { ca: SUPABASE_ROOT_CA_2021, rejectUnauthorized: true },
       max: 2,
-      // Time-bound a slow/hung pooler so a stall fails over to Airtable fast.
+      // Time-bound a slow/hung pooler so a stall rejects fast (propagating to
+      // the caller's try/catch → 500). WEBDEV-216 retired the Airtable fallback.
       // NOTE: the connect (2500) and query (3500) budgets are SEQUENTIAL, so
       // they do NOT individually sit under the 4000ms ceiling. The actual
       // guarantee: failover is guaranteed at 4000ms by the Promise.race in
@@ -151,15 +155,11 @@ function getPool(): pg.Pool {
   return pool;
 }
 
-/** True when SUPABASE_DB_URL is configured (so the Supabase path is usable). */
-export function hasSupabaseDbUrl(): boolean {
-  return Boolean(DB_URL);
-}
-
 /**
  * Race a read against SUPABASE_READ_TIMEOUT_MS so a stall at connect / TLS /
- * query rejects fast and lands in the caller's Airtable fallback. Every public
- * reader below goes through this — a hung pooler must never hang the dashboard.
+ * query rejects fast and propagates to the caller (the route's try/catch → 500).
+ * Every public reader below goes through this — a hung pooler must never hang
+ * the dashboard. WEBDEV-216 retired the Airtable read fallback.
  */
 async function withTimeout<T>(label: string, read: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -191,12 +191,13 @@ async function withTimeout<T>(label: string, read: Promise<T>): Promise<T> {
 // on every PR/push (.github/workflows/ci.yml) and gates every Vercel deploy
 // (vercel.json buildCommand). Upstream ETL drift (the writer starting to store
 // percents) is NOT caught by those fixture tests — at runtime the
-// assertFractionScale sentinel (./rateSentinel, WEBDEV-210) trips the getter
-// over to the Airtable fallback, and the scheduled parity run
-// (.github/workflows/parity.yml -> scripts/parity-webdev194.mjs) cross-checks
-// both stores daily while the dual-write window lasts. Each getter below runs
-// its query, sentinels the raw rows, and maps each row through the matching
-// pure mapper.
+// assertFractionScale sentinel (./rateSentinel, WEBDEV-210) throws, and the
+// error propagates to the caller (the route's try/catch → 500) rather than
+// silently serving wrong-scale rates (WEBDEV-216 retired the Airtable
+// fallback). The scheduled parity run (.github/workflows/parity.yml ->
+// scripts/parity-webdev194.mjs) cross-checks both stores daily while the
+// dual-write window lasts. Each getter below runs its query, sentinels the raw
+// rows, and maps each row through the matching pure mapper.
 
 // ---------------------------------------------------------------------------
 // marketing.ad_snapshots -> getAdSnapshots
@@ -221,11 +222,12 @@ export async function getAdSnapshotsFromSupabase(): Promise<AirtableRecord[]> {
           order by snapshot_date desc, snapshot_id asc`,
       );
       // Runtime unit-scale tripwire (WEBDEV-210): percent-scale drift on ctr
-      // throws here, landing in getAdSnapshots()'s catch -> Airtable fallback.
+      // throws here, and the error propagates to the caller (the route's
+      // try/catch → 500) — WEBDEV-216 retired the Airtable fallback.
       // cvr is warn-only: purchases include Meta VIEW-THROUGH attribution, so
       // purchases/clicks can legitimately exceed 1 on low-click days (a
       // percent-drifted writer still trips ctr on the same rows, which fails
-      // the whole read over). ROAS/Frequency are multiples — never listed.
+      // the whole read). ROAS/Frequency are multiples — never listed.
       assertFractionScale("marketing.ad_snapshots", rows, {
         throwOn: ["ctr"],
         warnOn: ["cvr", "hook_rate", "hold_rate"],
@@ -267,8 +269,8 @@ export async function getDailyAggregatesFromSupabase(): Promise<
 // ---------------------------------------------------------------------------
 // marketing.ad_alerts -> getAlerts
 // ---------------------------------------------------------------------------
-// NOTE: currently 0 rows on BOTH sides (the ad account is paused), so this
-// path fails over on-empty to Airtable (also empty) — harmless and by design.
+// NOTE: currently 0 rows (the ad account is paused), so an empty [] is the
+// expected result here, not an error (WEBDEV-216: Supabase-only, no fallback).
 export async function getAlertsFromSupabase(): Promise<AirtableRecord[]> {
   return withTimeout(
     "ad_alerts",
